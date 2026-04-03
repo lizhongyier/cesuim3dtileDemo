@@ -1,0 +1,202 @@
+{
+	"layerInfos" : 
+	[
+		{
+			"dataSourceName" : "",
+			"fieldInfos" : 
+			[
+				{
+					"alias" : "SmID",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmID",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmUserID",
+					"isRequired" : true,
+					"isSystem" : false,
+					"name" : "SmUserID",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmEdgeID",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmEdgeID",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmFNode",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmFNode",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmTNode",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmTNode",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmResistanceA",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmResistanceA",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "SmResistanceB",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmResistanceB",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "SmTopoError",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmTopoError",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "SmLength",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmLength",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "SmGeometry",
+					"isRequired" : true,
+					"isSystem" : true,
+					"name" : "SmGeometry",
+					"size" : 0,
+					"type" : "geometry"
+				},
+				{
+					"alias" : "SmPPoint",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "SmPPoint",
+					"size" : 72,
+					"type" : "longbinary"
+				},
+				{
+					"alias" : "SmNPoint",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "SmNPoint",
+					"size" : 72,
+					"type" : "longbinary"
+				},
+				{
+					"alias" : "guid",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "guid",
+					"size" : 46,
+					"type" : "ntext"
+				},
+				{
+					"alias" : "heightdiff",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "heightdiff",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "input",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "input",
+					"size" : 59,
+					"type" : "ntext"
+				},
+				{
+					"alias" : "inputElevation",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "inputElevation",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "name",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "name",
+					"size" : 13,
+					"type" : "ntext"
+				},
+				{
+					"alias" : "note",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "note",
+					"size" : 10,
+					"type" : "ntext"
+				},
+				{
+					"alias" : "output",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "output",
+					"size" : 59,
+					"type" : "ntext"
+				},
+				{
+					"alias" : "outputElevation",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "outputElevation",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "tubedo",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "tubedo",
+					"size" : 8,
+					"type" : "double"
+				},
+				{
+					"alias" : "tubelayout",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "tubelayout",
+					"size" : 4,
+					"type" : "int32"
+				},
+				{
+					"alias" : "tubelength",
+					"isRequired" : false,
+					"isSystem" : false,
+					"name" : "tubelength",
+					"size" : 8,
+					"type" : "double"
+				}
+			],
+			"idRange" : 
+			{
+				"maxID" : 127,
+				"minID" : 1
+			},
+			"layerName" : "ResultNetWork"
+		}
+	],
+	"version" : "1.0"
+}

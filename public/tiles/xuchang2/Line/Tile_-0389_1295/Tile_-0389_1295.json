@@ -1,0 +1,54 @@
+{
+    "asset": {
+        "version": "1.1"
+    },
+    "root": {
+        "children": [
+            {
+                "children": [
+                    {
+                        "boundingVolume": {
+                            "sphere": [
+                                19147.265625,
+                                3185.0711669921877,
+                                -29.61929512023937,
+                                2029.0639757119109
+                            ]
+                        },
+                        "geometricError": 324650.2517389058,
+                        "refine": "REPLACE",
+                        "content": {
+                            "url": "Tile_-0389_1295_0000_0001.glb"
+                        }
+                    }
+                ],
+                "boundingVolume": {
+                    "sphere": [
+                        19147.265625,
+                        3185.0711669921877,
+                        -29.612017731502648,
+                        2029.0712531006473
+                    ]
+                },
+                "geometricError": 8.00000022630441,
+                "refine": "REPLACE",
+                "content": {
+                    "url": "Tile_-0389_1295_0001_0001.glb"
+                }
+            }
+        ],
+        "boundingVolume": {
+            "sphere": [
+                19143.71372270983,
+                3184.017155668405,
+                -29.675424863515674,
+                2033.089941509905
+            ]
+        },
+        "geometricError": 5.656854085038349,
+        "refine": "REPLACE",
+        "content": {
+            "url": "Tile_-0389_1295.glb"
+        }
+    }
+}

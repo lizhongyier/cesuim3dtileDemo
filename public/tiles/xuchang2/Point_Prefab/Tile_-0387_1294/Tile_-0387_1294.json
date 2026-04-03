@@ -1,0 +1,20 @@
+{
+    "asset": {
+        "version": "1.1"
+    },
+    "root": {
+        "boundingVolume": {
+            "sphere": [
+                15659.0126953125,
+                -8867.618408203125,
+                72.37945938110352,
+                2652.251969761936
+            ]
+        },
+        "geometricError": 424360.3151619098,
+        "refine": "REPLACE",
+        "content": {
+            "url": "Tile_-0387_1294.glb"
+        }
+    }
+}

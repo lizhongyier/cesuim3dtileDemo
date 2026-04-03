@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>四川省晕渲图</title>
+  <link href="../../Build/SuperMap3D/Widgets/widgets.css" rel="stylesheet">
+  <link href="./css/pretty.css" rel="stylesheet">
+  <script src="./js/jquery.min.js"></script>
+  <script src="./js/config.js"></script>
+  <script type="text/javascript" src="../../Build/SuperMap3D/SuperMap3D.js"></script>
+</head>
+
+<body>
+  <div id="Container">
+  </div>
+  <script type="text/javascript">
+    /**
+     * SuperMap3D应用程序入口函数
+     * 初始化3D视图器，配置基本参数，用于展示四川省晕渲图
+     * @param {Object} SuperMap3D - SuperMap3D库对象
+     */
+    function onload(SuperMap3D) {
+      // 定义WGS84椭球体参数 [长半轴, 长半轴, 短半轴]
+      const obj = [6378137.0, 6378137.0, 6356752.3142451793];
+      // 设置WGS84椭球体参数并冻结对象防止修改
+      SuperMap3D.Ellipsoid.WGS84 = Object.freeze(new SuperMap3D.Ellipsoid(obj[0], obj[1], obj[2]));
+      
+      // 创建3D视图器实例，配置UI组件
+      const viewer = new SuperMap3D.Viewer('Container', {
+        timeline: false,                                           // 禁用时间轴控件
+        infoBox: false,                                            // 禁用信息框
+        selectionIndicator: false,                                 // 禁用选择指示器
+      });
+
+      // 等待场景初始化完成后调用init函数
+      viewer.scenePromise.then(function (scene) {
+        init(SuperMap3D, scene, viewer);                           // 初始化四川省晕渲图场景
+      });
+    }
+
+    /**
+     * 初始化四川省晕渲图3D场景
+     * 配置光照、大气、阴影等视觉效果，设置场景时间
+     * @param {Object} SuperMap3D - SuperMap3D库对象
+     * @param {Object} scene - 3D场景对象
+     * @param {Object} viewer - 3D视图器对象
+     */
+    function init(SuperMap3D, scene, viewer) {
+      // 配置场景光源和视觉效果
+      scene.lightSource.ambientLightColor = SuperMap3D.Color.BLUE;     // 设置环境光颜色为蓝色
+      scene.lightSource.visibleDistanceMax = 50000000;                 // 设置光源可见距离最大值：50000公里
+      scene.skyAtmosphere.show = true;                                 // 启用天空大气效果
+      scene.hdrEnabled = true;                                         // 启用HDR（高动态范围）渲染
+      scene.sun.show = true;                                           // 显示太阳
+      scene.shadowMap = true;                                          // 启用阴影贴图
+      scene.shadows = true;                                            // 启用阴影效果
+      scene.lightSource.ambientLightColor = new SuperMap3D.Color(0.65, 0.65, 0.65, 1); // 重新设置环境光颜色为灰色
+      
+      // 设置场景时间为2017年5月13日晚上8点
+      const endTime = new Date('2017-05-13');
+      endTime.setHours(20);                                           // 设置小时为20点（晚上8点）
+      viewer.clock.currentTime = SuperMap3D.JulianDate.fromDate(endTime); // 将时间转换为儒略日期并设置为当前时间
+      
+      const widget = viewer.cesiumWidget;                             // 获取Cesium组件实例
+      try {
+        // 创建定向光源，增强场景光照效果
+        let position1 = new SuperMap3D.Cartesian3.fromDegrees(116.261209157595, 39.3042238956531, 480);     // 光源位置：北京附近，高度480米
+        let targetPosition1 = new SuperMap3D.Cartesian3.fromDegrees(116.261209157595, 39.3042238956531, 430); // 光源目标位置：高度430米
+        let dirLightOptions = {
+          targetPosition: targetPosition1,                           // 光源照射目标位置
+          color: new SuperMap3D.Color(1.0, 1.0, 1.0, 1),           // 光源颜色：白色
+          intensity: 0.55                                           // 光源强度：0.55
+        };
+        directionalLight_1 = new SuperMap3D.DirectionalLight(position1, dirLightOptions); // 创建定向光源实例
+        scene.addLightSource(directionalLight_1);                   // 将定向光源添加到场景中
+
+        // 添加SuperMap影像图层作为底图
+        viewer.imageryLayers.addImageryProvider(new SuperMap3D.SuperMapImageryProvider({
+          url: 'https://www.supermapol.com/realspace/services/map-scyx/rest/maps/China_DARK', // 中国暗色底图服务URL
+        }));
+
+        // 打开SuperMap发布的四川省3D服务，加载所有图层
+        const url = 'https://www.supermapol.com/realspace/services/3D-scyx/rest/realspace'; // 四川省3D服务URL
+        const promise = scene.open(url);                             // 异步打开3D服务
+        SuperMap3D.when(promise, function (layers) {
+          // 3D服务加载成功，获取特定图层并配置显示效果
+          const layer = viewer.scene.layers.find('sichuan_Model_3'); // 查找四川省模型图层
+          const layer2 = viewer.scene.layers.find('Buffer@DataSource'); // 查找缓冲区数据源图层
+          
+          // 初始化各种视觉效果和功能
+          rotapic();                                                 // 创建底部旋转图片
+          borderline();                                              // 加载各市边界线
+          fanguang();                                                // 设置泛光效果
+
+          // 配置四川省模型图层的视觉效果
+          layer.brightness = 1.1;                                   // 亮度：1.1
+          layer.contrast = 1.44;                                    // 对比度：1.44
+          layer.hue = 6.22;                                         // 色调：6.22
+          layer.saturation = 0.7;                                   // 饱和度：0.7
+          
+          // 配置缓冲区图层的视觉效果
+          layer2.brightness = 1.5;                                  // 亮度：1.5
+          layer2.contrast = 1.54;                                   // 对比度：1.54
+          
+          // 可选：设置图层底部高度（已注释）
+          // layer.style3D.bottomAltitude = -20000;                 // 设置模型图层底部高度
+          // layer2.style3D.bottomAltitude = -20000;                // 设置缓冲区图层底部高度
+          
+          // 检查是否支持深度纹理拾取
+          if (!scene.pickPositionSupported) {
+            alert('不支持深度纹理,无法拾取位置！');                    // 提示不支持位置拾取
+          }
+        }, function (e) {
+          // 3D服务加载失败，显示错误信息
+          if (widget._showRenderLoopErrors) {
+            let title = '加载SCP失败，请检查网络连接状态或者url地址是否正确？';
+            widget.showErrorPanel(title, undefined, e);             // 显示错误面板
+          }
+        });
+      } catch (e) {
+        // 捕获渲染过程中的异常
+        if (widget._showRenderLoopErrors) {
+          let title = '渲染时发生错误，已停止渲染。';
+          widget.showErrorPanel(title, undefined, e);               // 显示渲染错误面板
+        }
+      }
+
+      // 初始化旋转角度（30度转换为弧度）
+      let rotation = SuperMap3D.Math.toRadians(30);
+      
+      /**
+       * 创建底部旋转图片实体
+       * 在四川省中心位置添加一个持续旋转的椭圆形装饰图片
+       */
+      function rotapic() {
+        let POIEntity = viewer.entities.add({
+          name: "test1",                                             // 实体名称
+          // 设置实体位置：四川省中心附近，经度102.93°，纬度30.45°，高度3000米
+          position: SuperMap3D.Cartesian3.fromDegrees(102.93464741761072, 30.449421089102337, 3000),
+          ellipse: {
+            semiMinorAxis: 600000,                                   // 椭圆短半轴：600公里
+            semiMajorAxis: 600000,                                   // 椭圆长半轴：600公里（圆形）
+            height: 3000,                                            // 椭圆高度：3000米
+            // 设置椭圆材质为图片材质
+            material: new SuperMap3D.ImageMaterialProperty({
+              image: './support/imgs/xuanyuncircle.png',             // 旋云圆圈图片路径
+              repeat: new SuperMap3D.Cartesian2(1, 1),              // 图片重复次数：1x1（不重复）
+              color: new SuperMap3D.Color.WHITE.withAlpha(0.4)      // 图片颜色：白色，透明度0.4
+            }),
+            // 设置椭圆旋转动画（通过回调函数实现连续旋转）
+            rotation: new SuperMap3D.CallbackProperty(getRotationValue, false),     // 椭圆旋转
+            stRotation: new SuperMap3D.CallbackProperty(getRotationValue, false),   // 纹理旋转
+            outline: false,                                          // 不显示轮廓线
+            numberOfVerticalLines: 100                               // 垂直线数量：100（影响椭圆精度）
+          },
+          description: '测试数据'                                     // 实体描述信息
+        });
+      }
+
+      /**
+       * 获取旋转值的回调函数
+       * 每次调用时增加旋转角度，实现连续旋转动画效果
+       * @returns {number} 当前旋转角度（弧度）
+       */
+      function getRotationValue() {
+        rotation += 0.0006;                                          // 每次增加0.0006弧度（约0.034度）
+        return rotation;                                             // 返回当前旋转角度
+      }
+
+      /**
+       * 加载并显示四川省边界线
+       * 包括城市边界线和省界泛光线
+       */
+      function borderline() {
+        // 加载四川省城市边界线数据
+        let promise = SuperMap3D.GeoJsonDataSource.load('./support/json/sichuanCity_3D.json');
+        promise.then(function (dataSource) {
+          // GeoJSON数据加载成功
+          viewer.dataSources.add(dataSource);                       // 将数据源添加到视图器
+          let entities = dataSource.entities.values;               // 获取所有实体
+          
+          // 遍历所有城市边界线实体，设置发光材质
+          for (let i = 0; i < entities.length; i++) {
+            let entity = entities[i];
+            // 设置城市边界线的发光材质
+            entity.polyline.material =
+              new SuperMap3D.PolylineGlowMaterialProperty({
+                glowPower: 0.3,                                      // 发光强度：0.3
+                color: new SuperMap3D.Color(250 / 255, 192 / 255, 143 / 255).withAlpha(1), // 发光颜色：橙黄色
+              });
+            entity.polyline.width = 2                               // 线宽：2像素
+          }
+        }).otherwise(function (error) {
+          // GeoJSON数据加载失败
+          window.alert(error);                                      // 显示错误信息
+        });
+        // 加载四川省省界泛光线数据
+        $.ajax({
+          url: './support/json/sichuanBounds_3D.json',              // 四川省边界3D数据文件
+          success: function (datas) {
+            // 省界数据加载成功
+            let points = [];                                         // 存储坐标点数组
+            let geometrys = datas.features;                         // 获取所有几何要素
+            
+            // 遍历所有省界几何要素
+            for (let i = 0; i < geometrys.length; i++) {
+              let geometry = geometrys[i].geometry;                 // 获取几何信息
+              let coordinates = geometry.coordinates;               // 获取坐标数组
+              
+              // 遍历坐标点，构建经纬度高度数组
+              for (let item of coordinates) {
+                points.push(item[0]);                               // 经度
+                points.push(item[1]);                               // 纬度
+                points.push(item[2])                                // 高度
+              };
+              
+              // 创建省界线实体并添加到场景
+              viewer.entities.add({
+                polyline: {
+                  // 将经纬度高度数组转换为笛卡尔坐标
+                  positions: new SuperMap3D.Cartesian3.fromDegreesArrayHeights(points),
+                  material: SuperMap3D.Color.WHITE,                 // 线条材质：白色
+                  width: 2                                          // 线宽：2像素
+                }
+              });
+            }
+          }
+        });
+        // 加载四川省第二套边界线数据（带发光效果）
+        $.ajax({
+          url: './support/json/sichuanbounds2.json',                // 四川省边界数据文件2
+          success: function (datas) {
+            // 边界数据加载成功
+            let points = [];                                         // 存储坐标点数组
+            let geometrys = datas.features;                         // 获取所有几何要素
+            
+            // 遍历所有边界几何要素
+            for (let i = 0; i < geometrys.length; i++) {
+              let geometry = geometrys[i].geometry;                 // 获取几何信息
+              let coordinates = geometry.coordinates;               // 获取坐标数组
+              
+              // 遍历坐标点，构建经纬度高度数组（高度设为0）
+              for (let item of coordinates) {
+                points.push(item[0]);                               // 经度
+                points.push(item[1]);                               // 纬度
+                points.push(0)                                      // 高度：0米（地面）
+              };
+              
+              // 创建带发光效果的边界线实体
+              viewer.entities.add({
+                polyline: {
+                  // 将经纬度高度数组转换为笛卡尔坐标
+                  positions: new SuperMap3D.Cartesian3.fromDegreesArrayHeights(points),
+                  // 设置发光材质
+                  material: new SuperMap3D.PolylineGlowMaterialProperty({
+                    glowPower: 0.3,                                 // 发光强度：0.3
+                    color: new SuperMap3D.Color(0, 2.88, 23.9, 1.0), // 发光颜色：深蓝色
+                  }),
+                  width: 2                                          // 线宽：2像素
+                }
+              });
+            }
+          }
+        })
+      }
+
+      /**
+       * 设置场景泛光效果
+       * 启用泛光渲染，增强场景的视觉效果
+       */
+      function fanguang() {
+        scene.bloomEffect.show = true;                              // 启用泛光效果
+        scene.bloomEffect.threshold = 2.9;                          // 泛光阈值：2.9
+        scene.bloomEffect.bloomIntensity = 0.05;                    // 泛光强度：0.05
+        scene.hdrEnabled = true;                                    // 启用HDR渲染
+      }
+
+      // 移除加载进度条
+      $('#loadingbar').remove();
+    }
+
+    // 检查SuperMap3D库是否已加载
+    if (typeof SuperMap3D !== 'undefined') {
+      window.startupCalled = true;                                  // 标记启动函数已调用
+      onload(SuperMap3D);                                           // 启动SuperMap3D应用
+    }
+  </script>
+</body>
+
+</html>
