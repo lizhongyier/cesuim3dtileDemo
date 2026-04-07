@@ -107,7 +107,6 @@ const initViewer = () => {
   viewer.imageryLayers.addImageryProvider(
     new Cesium.UrlTemplateImageryProvider({
       // url: "your img tiles url",
-      url: "https://api.mapbox.com/styles/v1/2p6u4/cmnihmm6o006201sadoom65j8/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiMnA2dTQiLCJhIjoiY21nMmZjaTlmMHZzMjJqcjN0ZmhqbzhvbiJ9.aM7dWxD-mYQkp4RHIlgNEg&zoomwheel=true&optimize=true",
       minimumLevel: 3,
       maximumLevel: 18,
     }),
