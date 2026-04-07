@@ -18,7 +18,7 @@ const addBloomEffect = (scene, Cesium) => {
     brightness: -0.3,
     delta: 1.0,
     sigma: 3.78,
-    stepSize: 3.0,
+    stepSize: 3.0
   };
 
   Cesium.knockout.track(viewModel);

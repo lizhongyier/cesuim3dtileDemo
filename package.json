@@ -12,6 +12,7 @@
     "3d-tiles-renderer": "^0.4.21",
     "cesium": "^1.140.0",
     "cesium-navigation-es6": "^3.0.9",
+    "dat.gui": "^0.7.9",
     "pinia": "^3.0.4",
     "three": "^0.180.0",
     "vite-plugin-cesium": "^1.2.23",

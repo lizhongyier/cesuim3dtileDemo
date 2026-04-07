@@ -11,28 +11,71 @@ import {
   TextureUniform,
   UniformType,
 } from "cesium";
-import {addBloomEffect} from "@/utils/addBloomEffect";
+import { addBloomEffect } from "@/utils/addBloomEffect";
+import * as dat from "dat.gui";
+import animationPipelineShader from "@/utils/animationPipelineShader";
+import pipelineShader from "@/utils/pipelineShader";
 const cesiumContainer = ref(null);
 let viewer = null;
 let scene = null;
 let pipelineTile = null;
 let pointTile = null;
-let BuildingTile = null;
-let model = null;
+let buildingTile = null;
 let imageBasedLighting = null;
 let pipelineShaderRef = null;
 let pointShaderRef = null;
 let animationId = null;
+let handler = null;
 let isAnimating = false;
+const gui = new dat.GUI();
 
-const height = 120.0;
-const hpr = new Cesium.HeadingPitchRoll(0.0, 0.0, 0.0);
-const origin = Cesium.Cartesian3.fromDegrees(
-  113.84888797556859,
-  34.00735651393037,
-  height,
-);
-const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr);
+// ========== 楼宇渐变颜色参数 ==========
+const buildingParameters = {
+  // 底部颜色 (默认深蓝色)
+  startColor: {
+    red: 0.0,
+    green: 0.2,
+    blue: 0.6,
+  },
+  // 顶部颜色 (默认亮青色)
+  endColor: {
+    red: 0.0,
+    green: 0.8,
+    blue: 1.0,
+  },
+  // 最小高度 (用于归一化)
+  minHeight: 0.0,
+  // 最大高度 (用于归一化)
+  maxHeight: 200.0,
+  // 渐变强度 (0-1, 1为完全渐变，0为纯色)
+  gradientIntensity: 1.0,
+  // 是否启用高度渐变
+  enableGradient: true,
+};
+
+const pipiLineParameters = {
+  baseColorTint: {
+    red: 1.0,
+    green: 1.0,
+    blue: 1.0,
+  },
+  flowColor: {
+    red: 1.0,
+    green: 0.6,
+    blue: 0.01,
+  },
+  metallicScale: 1.0,
+  roughnessScale: 0.32,
+  normalScale: 1.0,
+};
+
+const substationModelMatrix = (coord) => {
+  return Cesium.Transforms.headingPitchRollToFixedFrame(
+    Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
+    new Cesium.HeadingPitchRoll(0, 0, 0),
+  );
+};
+
 const substationList = ref([]);
 
 onMounted(() => {
@@ -72,6 +115,7 @@ const initViewer = () => {
   scene = viewer.scene;
   window.viewer = viewer;
   viewer.resolutionScale = window.devicePixelRatio;
+  // https://api.mapbox.com/styles/v1/2p6u4/cmnihmm6o006201sadoom65j8/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiMnA2dTQiLCJhIjoiY21nMmZjaTlmMHZzMjJqcjN0ZmhqbzhvbiJ9.aM7dWxD-mYQkp4RHIlgNEg&zoomwheel=true&optimize=true
   // 开启抗锯齿
   scene.fxaa = true;
   scene.postProcessStages.fxaa.enabled = true;
@@ -182,7 +226,7 @@ const add3DTiles = () => {
         pipelineTile = tileset;
       }
       if (tileset._basePath.indexOf("Building") > -1) {
-        BuildingTile = tileset;
+        buildingTile = tileset;
       }
       if (tileset._basePath.indexOf("Point_Auto") > -1) {
         pointTile = tileset;
@@ -251,36 +295,399 @@ const add3DTiles = () => {
       scene.light.intensity = 0.4;
       addPipelineTexture();
     }
+    if (buildingTile) {
+      const shader = makeBuildingCustomShader();
+      buildingTile.customShader = shader;
+      // 保存引用以便后续更新
+      buildingTile._customShaderRef = shader;
+      // 添加楼宇渐变调试面板
+      setBuildingParameters(shader);
+    }
   });
 };
 
 const addPipelineTexture = () => {
   pipelineTile.imageBasedLighting = imageBasedLighting;
   const shader = makeAnimationPipeLieCustomShader();
-  pipelineTile.customShader = shader
+  pipelineTile.customShader = shader;
   pipelineShaderRef = shader;
+  setPipelineParameters();
   if (pointTile) {
     // 管子连接处
     pointTile.imageBasedLighting = imageBasedLighting;
     pointTile.customShader = makePipeLieCustomShader();
   }
-  startFlowAnimation()
+  startFlowAnimation();
+};
+
+// ========== 新增：楼宇渐变调试面板 ==========
+const setBuildingParameters = (shader) => {
+  const group = gui.addFolder("楼宇渐变调参");
+  group.open();
+
+  // 起始颜色控制
+  const startColorFolder = group.addFolder("底部颜色 (Start Color)");
+  startColorFolder.open();
+  startColorFolder
+    .add(buildingParameters.startColor, "red", 0, 1)
+    .name("Red")
+    .onChange((e) => {
+      buildingParameters.startColor.red = e;
+      updateBuildingShaderUniforms(shader);
+    });
+  startColorFolder
+    .add(buildingParameters.startColor, "green", 0, 1)
+    .name("Green")
+    .onChange((e) => {
+      buildingParameters.startColor.green = e;
+      updateBuildingShaderUniforms(shader);
+    });
+  startColorFolder
+    .add(buildingParameters.startColor, "blue", 0, 1)
+    .name("Blue")
+    .onChange((e) => {
+      buildingParameters.startColor.blue = e;
+      updateBuildingShaderUniforms(shader);
+    });
+
+  // 结束颜色控制
+  const endColorFolder = group.addFolder("顶部颜色 (End Color)");
+  endColorFolder.open();
+  endColorFolder
+    .add(buildingParameters.endColor, "red", 0, 1)
+    .name("Red")
+    .onChange((e) => {
+      buildingParameters.endColor.red = e;
+      updateBuildingShaderUniforms(shader);
+    });
+  endColorFolder
+    .add(buildingParameters.endColor, "green", 0, 1)
+    .name("Green")
+    .onChange((e) => {
+      buildingParameters.endColor.green = e;
+      updateBuildingShaderUniforms(shader);
+    });
+  endColorFolder
+    .add(buildingParameters.endColor, "blue", 0, 1)
+    .name("Blue")
+    .onChange((e) => {
+      buildingParameters.endColor.blue = e;
+      updateBuildingShaderUniforms(shader);
+    });
+
+  // 高度范围控制
+  group
+    .add(buildingParameters, "minHeight", -100, 500)
+    .name("最小高度")
+    .onChange((e) => {
+      buildingParameters.minHeight = e;
+      updateBuildingShaderUniforms(shader);
+    });
+  group
+    .add(buildingParameters, "maxHeight", 0, 1000)
+    .name("最大高度")
+    .onChange((e) => {
+      buildingParameters.maxHeight = e;
+      updateBuildingShaderUniforms(shader);
+    });
+
+  // 渐变强度
+  group
+    .add(buildingParameters, "gradientIntensity", 0, 1)
+    .name("渐变强度")
+    .onChange((e) => {
+      buildingParameters.gradientIntensity = e;
+      updateBuildingShaderUniforms(shader);
+    });
+
+  // 是否启用渐变
+  group
+    .add(buildingParameters, "enableGradient")
+    .name("启用渐变")
+    .onChange((e) => {
+      buildingParameters.enableGradient = e;
+      updateBuildingShaderUniforms(shader);
+    });
+
+  // 初始化uniform值
+  updateBuildingShaderUniforms(shader);
+};
+
+// 更新楼宇Shader的Uniform值
+const updateBuildingShaderUniforms = (shader) => {
+  if (!shader) return;
+  
+  shader.setUniform(
+    "u_startColor",
+    new Cartesian3(
+      buildingParameters.startColor.red,
+      buildingParameters.startColor.green,
+      buildingParameters.startColor.blue,
+    ),
+  );
+  shader.setUniform(
+    "u_endColor",
+    new Cartesian3(
+      buildingParameters.endColor.red,
+      buildingParameters.endColor.green,
+      buildingParameters.endColor.blue,
+    ),
+  );
+  shader.setUniform("u_minHeight", buildingParameters.minHeight);
+  shader.setUniform("u_maxHeight", buildingParameters.maxHeight);
+  shader.setUniform("u_gradientIntensity", buildingParameters.gradientIntensity);
+  shader.setUniform("u_enableGradient", buildingParameters.enableGradient ? 1.0 : 0.0);
+};
+
+const setPipelineParameters = () => {
+  const group = gui.addFolder("管网调参");
+  group.open();
+  group
+    .add(pipiLineParameters.baseColorTint, "red", 0, 1)
+    .name("baseColor-red")
+    .onChange((e) => {
+      pipiLineParameters.baseColorTint.red = e;
+      pipelineShaderRef.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+      pointTile.customShader.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters.baseColorTint, "green", 0, 1)
+    .name("baseColor-green")
+    .onChange((e) => {
+      pipiLineParameters.baseColorTint.green = e;
+      pipelineShaderRef.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+      pointTile.customShader.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters.baseColorTint, "blue", 0, 1)
+    .name("baseColor-blue")
+    .onChange((e) => {
+      pipiLineParameters.baseColorTint.blue = e;
+      pipelineShaderRef.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+      pointTile.customShader.setUniform(
+        "u_baseColorTint",
+        new Cartesian3(
+          pipiLineParameters.baseColorTint.red,
+          pipiLineParameters.baseColorTint.green,
+          pipiLineParameters.baseColorTint.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters.flowColor, "red", 0, 1)
+    .name("flowColor-red")
+    .onChange((e) => {
+      pipiLineParameters.flowColor.red = e;
+      pipelineShaderRef.setUniform(
+        "u_flowColor",
+        new Cartesian3(
+          pipiLineParameters.flowColor.red,
+          pipiLineParameters.flowColor.green,
+          pipiLineParameters.flowColor.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters.flowColor, "green", 0, 1)
+    .name("flowColor-green")
+    .onChange((e) => {
+      pipiLineParameters.flowColor.green = e;
+      pipelineShaderRef.setUniform(
+        "u_flowColor",
+        new Cartesian3(
+          pipiLineParameters.flowColor.red,
+          pipiLineParameters.flowColor.green,
+          pipiLineParameters.flowColor.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters.flowColor, "blue", 0, 1)
+    .name("flowColor-blue")
+    .onChange((e) => {
+      pipiLineParameters.flowColor.blue = e;
+      pipelineShaderRef.setUniform(
+        "u_flowColor",
+        new Cartesian3(
+          pipiLineParameters.flowColor.red,
+          pipiLineParameters.flowColor.green,
+          pipiLineParameters.flowColor.blue,
+        ),
+      );
+    });
+  group
+    .add(pipiLineParameters, "metallicScale", 0, 10)
+    .name("metallicScale")
+    .onChange((e) => {
+      pipiLineParameters.metallicScale = e;
+      pipelineShaderRef.setUniform(
+        "u_metallicScale",
+        pipiLineParameters.metallicScale,
+      );
+      pointTile.customShader.setUniform(
+        "u_metallicScale",
+        pipiLineParameters.metallicScale,
+      );
+    });
+  group
+    .add(pipiLineParameters, "roughnessScale", 0, 10)
+    .name("roughnessScale")
+    .onChange((e) => {
+      pipiLineParameters.roughnessScale = e;
+      pipelineShaderRef.setUniform(
+        "u_roughnessScale",
+        pipiLineParameters.roughnessScale,
+      );
+      pointTile.customShader.setUniform(
+        "u_roughnessScale",
+        pipiLineParameters.roughnessScale,
+      );
+    });
+  group
+    .add(pipiLineParameters, "normalScale", 0, 10)
+    .name("normalScale")
+    .onChange((e) => {
+      pipiLineParameters.normalScale = e;
+      pipelineShaderRef.setUniform(
+        "u_normalScale",
+        pipiLineParameters.normalScale,
+      );
+      pointTile.customShader.setUniform(
+        "u_normalScale",
+        pipiLineParameters.normalScale,
+      );
+    });
+};
+
+// ========== 完善后的楼宇渐变Shader ==========
+const makeBuildingCustomShader = () => {
+  return new Cesium.CustomShader({
+    // 定义Uniform变量，用于外部传入颜色参数
+    // 注意：这里定义的 uniforms 会自动注入到 shader 中，不需要在 fragmentShaderText 中重复声明
+    uniforms: {
+      u_startColor: {
+        type: UniformType.VEC3,
+        value: new Cartesian3(
+          buildingParameters.startColor.red,
+          buildingParameters.startColor.green,
+          buildingParameters.startColor.blue,
+        ),
+      },
+      u_endColor: {
+        type: UniformType.VEC3,
+        value: new Cartesian3(
+          buildingParameters.endColor.red,
+          buildingParameters.endColor.green,
+          buildingParameters.endColor.blue,
+        ),
+      },
+      u_minHeight: {
+        type: UniformType.FLOAT,
+        value: buildingParameters.minHeight,
+      },
+      u_maxHeight: {
+        type: UniformType.FLOAT,
+        value: buildingParameters.maxHeight,
+      },
+      u_gradientIntensity: {
+        type: UniformType.FLOAT,
+        value: buildingParameters.gradientIntensity,
+      },
+      u_enableGradient: {
+        type: UniformType.FLOAT,
+        value: buildingParameters.enableGradient ? 1.0 : 0.0,
+      },
+    },
+    // 片元着色器 - 不要重复声明 uniforms，直接使用即可
+    fragmentShaderText: `
+      void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+        // 获取模型坐标系下的位置
+        vec3 positionMC = fsInput.attributes.positionMC;
+        
+        // 计算高度因子 (0.0 到 1.0)
+        float heightRange = u_maxHeight - u_minHeight;
+        float heightFactor = 0.0;
+        
+        if (heightRange > 0.0) {
+          heightFactor = clamp((positionMC.z - u_minHeight) / heightRange, 0.0, 1.0);
+        }
+        
+        // 根据高度在起始颜色和结束颜色之间进行线性插值
+        vec3 gradientColor = mix(u_startColor, u_endColor, heightFactor);
+        
+        // 判断是否启用渐变
+        vec3 finalColor;
+        if (u_enableGradient > 0.5) {
+          // 混合原始材质颜色和渐变颜色
+          finalColor = mix(material.diffuse, gradientColor, u_gradientIntensity);
+        } else {
+          finalColor = material.diffuse;
+        }
+        
+        // 应用最终颜色到 diffuse
+        material.diffuse = finalColor;
+        
+        // 注意：czm_modelMaterial 结构体在这个版本中没有 emission 字段
+        // 如果需要发光效果，可以通过调整 baseColor 或 specular 来实现
+        // 或者使用 material.emissive（如果存在的话）
+        
+        // 尝试使用 emissive 如果存在，否则跳过
+        #ifdef HAS_EMISSIVE
+          material.emissive = finalColor * 0.2;
+        #endif
+      }
+    `,
+  });
 };
 
 // 动态更新流动参数
-
 const startFlowAnimation = () => {
   if (isAnimating) return;
   isAnimating = true;
-  
+
   let startTime = performance.now();
-  
+
   const animate = () => {
     if (!isAnimating) return;
-    
+
     // 计算经过的时间（秒）
     const currentTime = (performance.now() - startTime) / 1000.0;
-    
+
     // 更新shader中的时间uniform
     if (pipelineShaderRef) {
       pipelineShaderRef.setUniform("u_time", currentTime);
@@ -288,414 +695,22 @@ const startFlowAnimation = () => {
     if (pointShaderRef) {
       pointShaderRef.setUniform("u_time", currentTime);
     }
-    
+
     // 请求下一帧
     animationId = requestAnimationFrame(animate);
   };
-  
+
   // 启动动画
   animationId = requestAnimationFrame(animate);
   console.log("流动动画已启动");
 };
 
 const makeAnimationPipeLieCustomShader = () => {
-  const PIPE_TEXTURES = {
-    baseColor: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Color.png",
-    normal: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_NormalGL.png",
-    metallicRoughness:
-      "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
-  };
-  
-  const FLOW_TEXTURE = "/textures/lineTexture/bj1.png";
-  
-  const createSolidTexture = (red, green, blue, alpha) => {
-    return new TextureUniform({
-      typedArray: new Uint8Array([red, green, blue, alpha]),
-      width: 1,
-      height: 1,
-    });
-  };
-  
-  const DEFAULT_OCCLUSION_TEXTURE = createSolidTexture(255, 255, 255, 255);
-  const DEFAULT_EMISSIVE_TEXTURE = createSolidTexture(0, 0, 0, 255);
-
-  const FLOW_CONFIG = {
-    speed: 0.5,
-    intensity: 2.8,
-    color: new Cartesian3(0.1, 0.4, 0.9),
-    uvScale: 1.0,        // 整体UV缩放
-    repeatX: 0.05,        // 新增：横向重复次数（越大=横向越短/密集，越小=横向越长/稀疏）
-    repeatY: 4.0,        // 新增：纵向重复次数
-    direction: 0,
-  };
-
-  const customShaderOpt = new CustomShader({
-    mode: CustomShaderMode.MODIFY_MATERIAL,
-    lightingModel: LightingModel.PBR,
-    uniforms: {
-      // ... 原有PBR贴图保持不变 ...
-      u_baseColorTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.baseColor }),
-      },
-      u_normalTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.normal }),
-      },
-      u_metallicRoughnessTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.metallicRoughness }),
-      },
-      u_occlusionTex: {
-        type: UniformType.SAMPLER_2D,
-        value: DEFAULT_OCCLUSION_TEXTURE,
-      },
-      u_emissiveTex: {
-        type: UniformType.SAMPLER_2D,
-        value: DEFAULT_EMISSIVE_TEXTURE,
-      },
-      u_baseColorTint: {
-        type: UniformType.VEC3,
-        value: new Cartesian3(1.0, 1.0, 1.0),
-      },
-      u_metallicScale: { type: UniformType.FLOAT, value: 1.0 },
-      u_roughnessScale: { type: UniformType.FLOAT, value: 0.32 },
-      u_normalScale: { type: UniformType.FLOAT, value: 1.0 },
-      
-      // 流动贴图和参数
-      u_flowTexture: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: FLOW_TEXTURE }),
-      },
-      u_time: { type: UniformType.FLOAT, value: 0.0 },
-      u_flowSpeed: { type: UniformType.FLOAT, value: FLOW_CONFIG.speed },
-      u_flowIntensity: { type: UniformType.FLOAT, value: FLOW_CONFIG.intensity },
-      u_flowColor: { type: UniformType.VEC3, value: FLOW_CONFIG.color },
-      u_flowUVScale: { type: UniformType.FLOAT, value: FLOW_CONFIG.uvScale },
-      // 新增：独立控制横向和纵向重复
-      u_flowRepeatX: { type: UniformType.FLOAT, value: FLOW_CONFIG.repeatX },
-      u_flowRepeatY: { type: UniformType.FLOAT, value: FLOW_CONFIG.repeatY },
-      u_flowDirection: { type: UniformType.INT, value: FLOW_CONFIG.direction },
-    },
-    fragmentShaderText: `
-    vec2 rotatePipeTexCoord90(vec2 texCoord) {
-      vec2 centered = texCoord - vec2(0.5);
-      return vec2(centered.y, -centered.x) + vec2(0.5);
-    }
-
-    mat3 computeCotangentFrame(vec3 normalEC, vec3 positionEC, vec2 texCoord) {
-      vec3 dp1 = dFdx(positionEC);
-      vec3 dp2 = dFdy(positionEC);
-      vec2 duv1 = dFdx(texCoord);
-      vec2 duv2 = dFdy(texCoord);
-      vec3 dp2perp = cross(dp2, normalEC);
-      vec3 dp1perp = cross(normalEC, dp1);
-      vec3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
-      vec3 bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
-      float invMax = inversesqrt(max(dot(tangent, tangent), dot(bitangent, bitangent)));
-      return mat3(tangent * invMax, bitangent * invMax, normalEC);
-    }
-
-    vec3 applyNormalMap(vec3 baseNormalEC, vec3 positionEC, vec2 texCoord) {
-      vec3 normalSample = texture(u_normalTex, texCoord).xyz * 2.0 - 1.0;
-      vec3 scaledNormalTS = normalize(vec3(
-        normalSample.xy * u_normalScale,
-        max(normalSample.z, 0.001)
-      ));
-      mat3 tbn = computeCotangentFrame(baseNormalEC, positionEC, texCoord);
-      return normalize(tbn * scaledNormalTS);
-    }
-
-    // ========== 修复后的流动动画函数（支持独立XY重复）==========
-    vec4 calculateFlow(vec2 baseUV) {
-      // 旋转UV 90度，让水平贴图适配纵向管子
-      vec2 rotatedUV = vec2(baseUV.t, baseUV.s);
-      
-      // 关键修改：独立控制横向和纵向重复
-      // 注意：由于UV旋转了，这里的X对应管子的长度方向，Y对应环绕方向
-      vec2 repeatUV = vec2(
-        rotatedUV.x * u_flowRepeatX,  // 横向（长度方向）重复
-        rotatedUV.y * u_flowRepeatY   // 纵向（环绕方向）重复
-      );
-      
-      // 应用整体缩放（可选，保留兼容）
-      vec2 scaledUV = repeatUV * u_flowUVScale;
-      
-      // 计算流动偏移
-      float flowOffset = u_time * u_flowSpeed;
-      
-      // 根据方向选择流动轴向
-      vec2 flowUV;
-      if (u_flowDirection == 0) {
-        // 沿管子长度方向流动（X轴）
-        flowUV = vec2(fract(scaledUV.s - flowOffset), scaledUV.t);
-      } else {
-        // 环绕管子流动（Y轴）
-        flowUV = vec2(scaledUV.s, fract(scaledUV.t - flowOffset));
-      }
-      
-      // 采样流动贴图
-      vec4 flowSample = texture(u_flowTexture, flowUV);
-      
-      // 应用颜色染色和强度
-      vec3 coloredFlow = flowSample.rgb * u_flowColor;
-      float alpha = flowSample.a * u_flowIntensity;
-      
-      return vec4(coloredFlow, alpha);
-    }
-
-    void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-      vec2 texCoord = rotatePipeTexCoord90(fsInput.attributes.texCoord_0);
-      
-      // 采样基础PBR材质
-      vec4 baseColorSample = texture(u_baseColorTex, texCoord);
-      vec4 metallicRoughnessSample = texture(u_metallicRoughnessTex, texCoord);
-      vec3 baseColor = clamp(baseColorSample.rgb * u_baseColorTint, 0.0, 1.0);
-      float alpha = baseColorSample.a;
-      float roughness = clamp(metallicRoughnessSample.g * u_roughnessScale, 0.04, 1.0);
-      float metallic = clamp(metallicRoughnessSample.b * u_metallicScale, 0.0, 1.0);
-      
-      // 法线计算
-      vec3 rawNormalEC = fsInput.attributes.normalEC;
-      float rawNormalLength = length(rawNormalEC);
-      vec3 geometryNormalEC = rawNormalLength > 0.0
-        ? rawNormalEC / rawNormalLength
-        : vec3(0.0, 0.0, 1.0);
-      vec3 normalEC = applyNormalMap(
-        geometryNormalEC,
-        fsInput.attributes.positionEC,
-        texCoord
-      );
-      vec3 viewDirectionEC = normalize(-fsInput.attributes.positionEC);
-
-      if (dot(normalEC, viewDirectionEC) < 0.0) {
-        normalEC = -normalEC;
-      }
-
-      // 流动效果计算
-      vec4 flowResult = calculateFlow(texCoord);
-      
-      // 叠加模式：基础颜色 + 流动效果
-      vec3 finalBaseColor = baseColor + flowResult.rgb * flowResult.a;
-      finalBaseColor = clamp(finalBaseColor, 0.0, 1.0);
-      
-      // 自发光增强
-      vec3 emissive = flowResult.rgb * flowResult.a * 0.5;
-
-      // PBR材质组装
-      vec3 f0 = mix(vec3(0.04), finalBaseColor, metallic);
-      vec3 diffuseColor = finalBaseColor * (1.0 - metallic) * 0.96;
-
-      material.occlusion = 1.0;
-      material.emissive = emissive;
-      material.baseColor = vec4(finalBaseColor, alpha);
-      material.diffuse = diffuseColor;
-      material.specular = f0;
-      material.roughness = roughness;
-      material.normalEC = normalEC;
-      material.alpha = alpha;
-    }
-    `,
-  });
-  return customShaderOpt;
+  return animationPipelineShader(pipiLineParameters);
 };
 
 const makePipeLieCustomShader = () => {
-  const PIPE_TEXTURES = {
-    baseColor: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Color.png",
-    normal: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_NormalGL.png",
-    metallicRoughness:
-      "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
-  };
-  const createSolidTexture = (red, green, blue, alpha) => {
-    return new TextureUniform({
-      typedArray: new Uint8Array([red, green, blue, alpha]),
-      width: 1,
-      height: 1,
-    });
-  };
-  const DEFAULT_OCCLUSION_TEXTURE = createSolidTexture(255, 255, 255, 255);
-  const DEFAULT_EMISSIVE_TEXTURE = createSolidTexture(0, 0, 0, 255);
-  const PIPE_DEBUG_VIEW_VALUES = {
-    off: 0,
-    "attribute-normal": 1,
-    roughness: 2,
-    metallic: 3,
-  };
-  pipelineTile.imageBasedLighting = imageBasedLighting;
-  const customShaderOpt = new CustomShader({
-    mode: CustomShaderMode.REPLACE_MATERIAL,
-    lightingModel: LightingModel.PBR,
-    uniforms: {
-      u_baseColorTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.baseColor }),
-      },
-      u_normalTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.normal }),
-      },
-      u_metallicRoughnessTex: {
-        type: UniformType.SAMPLER_2D,
-        value: new TextureUniform({ url: PIPE_TEXTURES.metallicRoughness }),
-      },
-      u_occlusionTex: {
-        type: UniformType.SAMPLER_2D,
-        value: DEFAULT_OCCLUSION_TEXTURE,
-      },
-      u_emissiveTex: {
-        type: UniformType.SAMPLER_2D,
-        value: DEFAULT_EMISSIVE_TEXTURE,
-      },
-      u_baseColorTint: {
-        type: UniformType.VEC3,
-        value: new Cartesian3(1.0, 1.0, 1.0),
-      },
-      u_metallicScale: {
-        type: UniformType.FLOAT,
-        value: 1.0,
-      },
-      u_roughnessScale: {
-        type: UniformType.FLOAT,
-        value: 0.32,
-      },
-      u_normalScale: {
-        type: UniformType.FLOAT,
-        value: 1.0,
-      },
-      u_occlusionStrength: {
-        type: UniformType.FLOAT,
-        value: 0.0,
-      },
-      u_debugViewMode: {
-        type: UniformType.INT,
-        value: PIPE_DEBUG_VIEW_VALUES.off,
-      },
-      u_hasOcclusionTex: {
-        type: UniformType.BOOL,
-        value: false,
-      },
-      u_hasEmissiveTex: {
-        type: UniformType.BOOL,
-        value: false,
-      },
-    },
-    fragmentShaderText: `
-    vec2 rotatePipeTexCoord90(vec2 texCoord) {
-      vec2 centered = texCoord - vec2(0.5);
-      return vec2(centered.y, -centered.x) + vec2(0.5);
-    }
-
-    mat3 computeCotangentFrame(vec3 normalEC, vec3 positionEC, vec2 texCoord) {
-      vec3 dp1 = dFdx(positionEC);
-      vec3 dp2 = dFdy(positionEC);
-      vec2 duv1 = dFdx(texCoord);
-      vec2 duv2 = dFdy(texCoord);
-      vec3 dp2perp = cross(dp2, normalEC);
-      vec3 dp1perp = cross(normalEC, dp1);
-      vec3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
-      vec3 bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
-      float invMax = inversesqrt(max(dot(tangent, tangent), dot(bitangent, bitangent)));
-      return mat3(tangent * invMax, bitangent * invMax, normalEC);
-    }
-
-    vec3 applyNormalMap(vec3 baseNormalEC, vec3 positionEC, vec2 texCoord) {
-      vec3 normalSample = texture(u_normalTex, texCoord).xyz * 2.0 - 1.0;
-      vec3 scaledNormalTS = normalize(vec3(
-        normalSample.xy * u_normalScale,
-        max(normalSample.z, 0.001)
-      ));
-      mat3 tbn = computeCotangentFrame(baseNormalEC, positionEC, texCoord);
-      return normalize(tbn * scaledNormalTS);
-    }
-
-    void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-      vec2 texCoord = rotatePipeTexCoord90(fsInput.attributes.texCoord_0);
-      vec4 baseColorSample = texture(u_baseColorTex, texCoord);
-      vec4 metallicRoughnessSample = texture(u_metallicRoughnessTex, texCoord);
-      vec3 baseColor = clamp(baseColorSample.rgb * u_baseColorTint, 0.0, 1.0);
-      float alpha = baseColorSample.a;
-      float roughness = clamp(metallicRoughnessSample.g * u_roughnessScale, 0.04, 1.0);
-      float metallic = clamp(metallicRoughnessSample.b * u_metallicScale, 0.0, 1.0);
-      vec3 rawNormalEC = fsInput.attributes.normalEC;
-      float rawNormalLength = length(rawNormalEC);
-      vec3 geometryNormalEC = rawNormalLength > 0.0
-        ? rawNormalEC / rawNormalLength
-        : vec3(0.0, 0.0, 1.0);
-      vec3 normalEC = applyNormalMap(
-        geometryNormalEC,
-        fsInput.attributes.positionEC,
-        texCoord
-      );
-      vec3 viewDirectionEC = normalize(-fsInput.attributes.positionEC);
-
-      if (dot(normalEC, viewDirectionEC) < 0.0) {
-        normalEC = -normalEC;
-      }
-
-      if (u_debugViewMode != 0) {
-        if (u_debugViewMode == 1) {
-          vec3 debugColor = rawNormalLength > 0.0
-            ? geometryNormalEC * 0.5 + 0.5
-            : vec3(1.0, 0.0, 1.0);
-          material.occlusion = 1.0;
-          material.emissive = debugColor;
-          material.baseColor = vec4(debugColor, 1.0);
-          material.diffuse = vec3(0.0);
-          material.specular = vec3(0.0);
-          material.roughness = 1.0;
-          material.normalEC = geometryNormalEC;
-          material.alpha = 1.0;
-          return;
-        }
-
-        if (u_debugViewMode == 2) {
-          vec3 debugColor = vec3(roughness);
-          material.occlusion = 1.0;
-          material.emissive = debugColor;
-          material.baseColor = vec4(debugColor, 1.0);
-          material.diffuse = vec3(0.0);
-          material.specular = vec3(0.0);
-          material.roughness = 1.0;
-          material.normalEC = normalEC;
-          material.alpha = 1.0;
-          return;
-        }
-
-        vec3 debugColor = vec3(metallic);
-        material.occlusion = 1.0;
-        material.emissive = debugColor;
-        material.baseColor = vec4(debugColor, 1.0);
-        material.diffuse = vec3(0.0);
-        material.specular = vec3(0.0);
-        material.roughness = 1.0;
-        material.normalEC = normalEC;
-        material.alpha = 1.0;
-        return;
-      }
-
-      vec3 f0 = mix(vec3(0.04), baseColor, metallic);
-      vec3 diffuseColor = baseColor * (1.0 - metallic) * 0.96;
-
-      material.occlusion = 1.0;
-      if (u_hasOcclusionTex) {
-        float occlusion = texture(u_occlusionTex, texCoord).r;
-        material.occlusion = mix(1.0, occlusion, u_occlusionStrength);
-      }
-
-      material.emissive = u_hasEmissiveTex
-        ? texture(u_emissiveTex, texCoord).rgb
-        : vec3(0.0);
-      material.baseColor = vec4(baseColor, alpha);
-      material.diffuse = diffuseColor;
-      material.specular = f0;
-      material.roughness = roughness;
-      material.normalEC = normalEC;
-      material.alpha = alpha;
-    }
-    `,
-  });
-  return customShaderOpt;
+  return pipelineShader(pipiLineParameters);
 };
 
 const addSubStations = async () => {
@@ -704,11 +719,12 @@ const addSubStations = async () => {
     const res = await fetch("/json/substation.json");
     const data = await res.json();
     console.log(data);
+    // 换热站颜色
     const colors = [
-      Cesium.Color.fromCssColorString("#0088ff"), // Blue
-      Cesium.Color.fromCssColorString("#00ff00"), // Green
-      Cesium.Color.fromCssColorString("#ffaa00"), // Yellow
-      Cesium.Color.fromCssColorString("#FFE366"), // Orange
+      Cesium.Color.fromCssColorString("#FFC300"), // Blue
+      Cesium.Color.fromCssColorString("#FFC300"), // Green
+      Cesium.Color.fromCssColorString("#FFC300"), // Yellow
+      Cesium.Color.fromCssColorString("#FFC300"), // Orange
     ];
     const colorsCss = ["#0088ff", "#00ff00", "#ffaa00", "#FFE366"];
     const points = data.slice(0, 50);
@@ -720,10 +736,10 @@ const addSubStations = async () => {
       const color = colors[colorIndex];
       const cssColor = colorsCss[colorIndex];
       const cylinderHeight = 40.0;
-
-      makeCircle(color, coord, viewer, Cesium);
-      makePillar(color, coord, viewer, Cesium);
-      makeSpriteAnimation(color, coord, viewer, Cesium);
+      const properties = feature.properties;
+      const circlePrimitive = makeCircle(color, coord, properties);
+      const pillarPrimitive = makePillar(color, coord, properties);
+      makeSpriteAnimation(color, coord);
 
       subList.push({
         id: feature.id,
@@ -741,12 +757,21 @@ const addSubStations = async () => {
       });
     });
     substationList.value = subList;
+    handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction((event) => {
+      const pickResult = viewer.scene.pick(event.position);
+      console.log(pickResult);
+      if (pickResult && pickResult.id) {
+        const pickData = pickResult.id;
+        console.log(pickData);
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   } catch (error) {
     console.error(`Error creating point tileset: ${error}`);
   }
 };
 
-const makeCircle = (color, coord, viewer, Cesium) => {
+const makeCircle = (color, coord, properties) => {
   const options = {
     position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
     scale: 2.0, // 调整圆环大小以匹配尖柱底部
@@ -763,12 +788,13 @@ const makeCircle = (color, coord, viewer, Cesium) => {
 
   const circleGeometry = new Cesium.CircleGeometry({
     center: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0.5),
-    radius: 38.0,
+    radius: 60.0, // 波纹扩散半径
     vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
   });
 
   const instance = new Cesium.GeometryInstance({
     geometry: circleGeometry,
+    id: properties,
   });
 
   // 波纹扩散着色器逻辑
@@ -793,7 +819,7 @@ const makeCircle = (color, coord, viewer, Cesium) => {
           float fade = 1.0 - smoothstep(0.3, 0.5, dist);
           
           float alpha = (ripple + centerGlow) * fade;
-          out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0);
+          out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0); // 底部圆环颜色强度
       }
     `,
   });
@@ -806,13 +832,14 @@ const makeCircle = (color, coord, viewer, Cesium) => {
     geometryInstances: instance,
     appearance: appearance,
     asynchronous: false,
+    allowPicking: true,
   });
 
   viewer.scene.primitives.add(primitive);
   return primitive;
 };
 
-const makePillar = (color, coord, viewer, Cesium) => {
+const makePillar = (color, coord, properties) => {
   const options = {
     position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
     scale: 2.0,
@@ -823,9 +850,9 @@ const makePillar = (color, coord, viewer, Cesium) => {
   const heightSegments = 30; // 高度分段数，分段越多弧度越平滑
   const radius = 8.0; // 底部半径基准
   const topRadius = 0.5; // 顶部半径基准（增大，使其不要太尖）
-  const height = 120.0; // 高度基准
+  const height = 60.0; // 高度基准
 
-  // 使用指数衰减函数来实现平滑的“人”字形弯曲（从顶到底一直弯曲下来）
+  // 使用指数衰减函数来实现平滑的"人"字形弯曲（从顶到底一直弯曲下来）
   // power 控制弯曲的剧烈程度。power = 1 是直线，power > 1 是向内凹的抛物线
   const curvePower = 3.0;
 
@@ -931,10 +958,8 @@ const makePillar = (color, coord, viewer, Cesium) => {
 
   const instance = new Cesium.GeometryInstance({
     geometry: geometry,
-    modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(
-      Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
-      new Cesium.HeadingPitchRoll(0, 0, 0),
-    ),
+    modelMatrix: substationModelMatrix(coord),
+    id: properties,
   });
 
   const appearance = new Cesium.Appearance({
@@ -952,7 +977,7 @@ const makePillar = (color, coord, viewer, Cesium) => {
           // 我们直接使用传进来的颜色
           float powerRatio = fract(czm_frameNumber / 30.0) + 1.0;
           float alpha = pow(1.0 - v_st.t, powerRatio);
-          out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0);
+          out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0); // 侧边颜色强度
       }
     `,
     vertexShaderSource: `
@@ -977,13 +1002,14 @@ const makePillar = (color, coord, viewer, Cesium) => {
     geometryInstances: instance,
     appearance: appearance,
     asynchronous: false,
+    allowPicking: true,
   });
 
   viewer.scene.primitives.add(primitive);
   return primitive;
 };
 
-const makeSpriteAnimation = (color, coord, viewer, Cesium) => {
+const makeSpriteAnimation = (color, coord) => {
   const options = {
     position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
     scale: 2.0,
@@ -1072,10 +1098,7 @@ const makeSpriteAnimation = (color, coord, viewer, Cesium) => {
 
   const instance = new Cesium.GeometryInstance({
     geometry: geometry,
-    modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(
-      Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
-      new Cesium.HeadingPitchRoll(0, 0, 0),
-    ),
+    modelMatrix: substationModelMatrix(coord),
   });
 
   const appearance = new Cesium.MaterialAppearance({
@@ -1142,6 +1165,7 @@ const makeSpriteAnimation = (color, coord, viewer, Cesium) => {
     geometryInstances: instance,
     appearance: appearance,
     asynchronous: false,
+    allowPicking: false,
   });
 
   scene.primitives.add(primitive);
@@ -1149,88 +1173,100 @@ const makeSpriteAnimation = (color, coord, viewer, Cesium) => {
 };
 
 onUnmounted(() => {
+  // 清理gui
+  if (gui) {
+    gui.destroy();
+  }
+  // 停止动画
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+  }
+  // 移除事件监听
+  if (handler) {
+    handler.destroy();
+  }
+  // 销毁viewer
+  if (viewer) {
+    viewer.destroy();
+  }
   viewer = null;
 });
 </script>
 <template>
-  <div
-    class="cesuim-container"
-    id="cesiumContainer"
-    ref="cesiumContainer"
-  >
+  <div class="cesuim-container" id="cesiumContainer" ref="cesiumContainer">
     <div id="toolbar">
       <table>
-    <tbody>
-      <tr>
-        <td>Bloom</td>
-        <td><input type="checkbox" data-bind="checked: show" /></td>
-      </tr>
-      <tr>
-        <td>Glow only</td>
-        <td><input type="checkbox" data-bind="checked: glowOnly" /></td>
-      </tr>
-      <tr>
-        <td>Contrast</td>
-        <td>
-          <input
-            type="range"
-            min="-255.0"
-            max="255.0"
-            step="0.01"
-            data-bind="value: contrast, valueUpdate: 'input'"
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>Brightness</td>
-        <td>
-          <input
-            type="range"
-            min="-1.0"
-            max="1.0"
-            step="0.01"
-            data-bind="value: brightness, valueUpdate: 'input'"
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>Delta</td>
-        <td>
-          <input
-            type="range"
-            min="1"
-            max="5"
-            step="0.01"
-            data-bind="value: delta, valueUpdate: 'input'"
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>Sigma</td>
-        <td>
-          <input
-            type="range"
-            min="1"
-            max="10"
-            step="0.01"
-            data-bind="value: sigma, valueUpdate: 'input'"
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>Step Size</td>
-        <td>
-          <input
-            type="range"
-            min="0"
-            max="7"
-            step="0.01"
-            data-bind="value: stepSize, valueUpdate: 'input'"
-          />
-        </td>
-      </tr>
-    </tbody>
-  </table>
+        <tbody>
+          <tr>
+            <td>Bloom</td>
+            <td><input type="checkbox" data-bind="checked: show" /></td>
+          </tr>
+          <tr>
+            <td>Glow only</td>
+            <td><input type="checkbox" data-bind="checked: glowOnly" /></td>
+          </tr>
+          <tr>
+            <td>Contrast</td>
+            <td>
+              <input
+                type="range"
+                min="-255.0"
+                max="255.0"
+                step="0.01"
+                data-bind="value: contrast, valueUpdate: 'input'"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>Brightness</td>
+            <td>
+              <input
+                type="range"
+                min="-1.0"
+                max="1.0"
+                step="0.01"
+                data-bind="value: brightness, valueUpdate: 'input'"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>Delta</td>
+            <td>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="0.01"
+                data-bind="value: delta, valueUpdate: 'input'"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>Sigma</td>
+            <td>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="0.01"
+                data-bind="value: sigma, valueUpdate: 'input'"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>Step Size</td>
+            <td>
+              <input
+                type="range"
+                min="0"
+                max="7"
+                step="0.01"
+                data-bind="value: stepSize, valueUpdate: 'input'"
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
@@ -1246,7 +1282,6 @@ onUnmounted(() => {
   top: 10px;
   left: 10px;
   z-index: 9999;
-  color: #FFF;
+  color: #fff;
 }
-
 </style>

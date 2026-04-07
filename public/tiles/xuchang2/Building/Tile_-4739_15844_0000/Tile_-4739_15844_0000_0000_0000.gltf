@@ -1,0 +1,270 @@
+{
+  "asset": {
+    "generator": "COLLADA2GLTF",
+    "version": "2.0"
+  },
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "name": "Z_UP"
+    },
+    {
+      "mesh": 0,
+      "matrix": [
+        0.9999997019767761,
+        0.000439674622612074,
+        -0.0006509211380034685,
+        0,
+        -0.00043985270895063877,
+        0.9999998807907104,
+        -0.0002734697191044688,
+        0,
+        0.0006508008227683604,
+        0.0002737559552770108,
+        0.9999997615814209,
+        0,
+        4155.26025390625,
+        1739.8414306640625,
+        -1.5902702808380127,
+        1
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 1,
+            "NORMAL": 2,
+            "POSITION": 3,
+            "_FEATURE_ID_0": 4
+          },
+          "indices": 0,
+          "mode": 4,
+          "material": 0,
+          "extensions": {
+            "EXT_mesh_features": {
+              "featureIds": [
+                {
+                  "featureCount": 35,
+                  "attribute": 0,
+                  "propertyTable": 0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "name": "0000024EBF9727E0"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5123,
+      "count": 3264,
+      "max": [
+        1745
+      ],
+      "min": [
+        0
+      ],
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 1746,
+      "max": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "min": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 1746,
+      "max": [
+        1,
+        1,
+        1
+      ],
+      "min": [
+        -1,
+        -1,
+        -1
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 20952,
+      "componentType": 5126,
+      "count": 1746,
+      "max": [
+        110.5955810546875,
+        393.81182861328125,
+        75
+      ],
+      "min": [
+        -327.7359924316406,
+        -279.131591796875,
+        -0.012465759180486202
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 1746,
+      "max": [
+        34
+      ],
+      "min": [
+        0
+      ],
+      "type": "SCALAR"
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      },
+      "emissiveFactor": [
+        0,
+        0,
+        0
+      ],
+      "alphaMode": "OPAQUE",
+      "doubleSided": true,
+      "name": "21F8D6F9-A198-4681-BF86-52B650BC211D_WhiteMaterial#BatchPBR_0_4294867297"
+    }
+  ],
+  "extensions": {
+    "EXT_structural_metadata": {
+      "propertyTables": [
+        {
+          "class": "smAttribute",
+          "count": 35,
+          "name": "smAttribute",
+          "properties": {
+            "id": {
+              "values": 4
+            }
+          }
+        }
+      ],
+      "schema": {
+        "classes": {
+          "smAttribute": {
+            "name": "smAttribute",
+            "properties": {
+              "id": {
+                "name": "id",
+                "type": "UINT32"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 6528,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 6528,
+      "byteLength": 27936,
+      "byteStride": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 34464,
+      "byteLength": 41904,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 76368,
+      "byteLength": 6984,
+      "byteStride": 4,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 83352,
+      "byteLength": 140
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Tile_-4739_15844_0000_0000_0000_data.bin",
+      "byteLength": 83492
+    }
+  ],
+  "extensionsRequired": [
+    "EXT_mesh_features",
+    "EXT_structural_metadata"
+  ],
+  "extensionsUsed": [
+    "EXT_mesh_features",
+    "EXT_structural_metadata"
+  ]
+}

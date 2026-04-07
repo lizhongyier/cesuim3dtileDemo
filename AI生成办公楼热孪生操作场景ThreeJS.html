@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Tower - 暗黑科技数字孪生</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #03050a; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; }
+        
+        #app-wrapper {
+            position: relative;
+            width: 1920px;
+            height: 1080px;
+            transform-origin: center center;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        
+        .glass-panel { 
+            background: linear-gradient(135deg, rgba(5, 10, 25, 0.85) 0%, rgba(10, 15, 35, 0.95) 100%);
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(0, 243, 255, 0.15);
+            box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.05), 0 0 30px rgba(0,0,0,0.8);
+        }
+        .tech-border { border-left: 2px solid #00f3ff; }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0, 243, 255, 0.3); border-radius: 2px; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        input[type=range] {
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            height: 2px;
+            border-radius: 2px;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px; width: 6px;
+            background: #00f3ff;
+            box-shadow: 0 0 8px #00f3ff;
+            cursor: pointer;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body class="text-slate-300">
+
+    <div id="app-wrapper">
+        <div id="canvas-container"></div>
+
+        <!-- 退出展开模式按钮 -->
+        <button id="closeExplodeBtn" class="absolute top-8 right-8 z-50 bg-[#00f3ff]/10 hover:bg-[#00f3ff]/20 text-[#00f3ff] border border-[#00f3ff] px-6 py-2.5 rounded font-mono text-sm tracking-widest transition-all shadow-[0_0_15px_rgba(0,243,255,0.2)] opacity-0 pointer-events-none flex items-center gap-2 backdrop-blur-md">
+            <div class="w-2 h-2 rounded-full bg-[#00f3ff] animate-pulse"></div>
+            退出展开 / EXIT EXPAND
+        </button>
+
+        <!-- 左侧 UI 仪表盘 -->
+        <div class="glass-panel absolute inset-y-8 left-8 w-[320px] flex flex-col z-10 rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-[#00f3ff]/20 bg-gradient-to-r from-[#00f3ff]/10 to-transparent">
+                <h1 class="text-lg font-bold text-[#00f3ff] tracking-[0.2em] flex items-center gap-2">
+                    NEXUS CORE
+                    <div class="w-1.5 h-1.5 rounded-full bg-[#00f3ff] animate-pulse shadow-[0_0_8px_#00f3ff]"></div>
+                </h1>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-mono">Quantum Twin Simulator v2.0</p>
+            </div>
+
+            <div class="px-4 py-3 border-b border-[#00f3ff]/10 bg-black/40">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[11px] font-semibold text-slate-400 tracking-wider">系统时间</span>
+                    <span id="timeDisplay" class="text-[#00f3ff] font-mono text-xs drop-shadow-[0_0_5px_#00f3ff]">12:00</span>
+                </div>
+                <input type="range" id="timeSlider" min="0" max="24" step="0.25" value="12" class="w-full">
+            </div>
+
+            <div class="flex border-b border-[#00f3ff]/10 bg-black/60 text-[10px]">
+                <button class="tab-btn flex-1 py-2 font-semibold uppercase tracking-widest text-[#00f3ff] border-b border-[#00f3ff] bg-[#00f3ff]/5" data-target="tab-env">环境监控</button>
+                <button class="tab-btn flex-1 py-2 font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-300" data-target="tab-personnel">人员动态</button>
+                <button class="tab-btn flex-1 py-2 font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-300" data-target="tab-energy">能源拓扑</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
+                <div id="tab-env" class="tab-content active space-y-5">
+                    <div>
+                        <h3 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 tech-border pl-2">视图模式</h3>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button class="view-mode-btn bg-[#00f3ff]/20 text-[#00f3ff] border border-[#00f3ff]/50 rounded py-1 text-[10px] font-mono shadow-[0_0_10px_rgba(0,243,255,0.2)]" data-mode="default">实时物理</button>
+                            <button class="view-mode-btn bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 rounded py-1 text-[10px] font-mono transition-all" data-mode="heatmap">热成像</button>
+                            <button class="view-mode-btn bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 rounded py-1 text-[10px] font-mono transition-all" data-mode="people">透视侦测</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 tech-border pl-2">空间指令</h3>
+                        <div class="space-y-2">
+                            <label class="flex items-center justify-between cursor-pointer group bg-white/5 p-1.5 rounded border border-white/5 hover:border-white/10 transition-colors">
+                                <span class="text-[11px] text-slate-300 group-hover:text-white">区域功能映射</span>
+                                <input type="checkbox" id="toggleZones" class="sr-only peer">
+                                <div class="w-7 h-3.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-slate-400 peer-checked:after:bg-[#00f3ff] after:rounded-full after:h-[12px] after:w-[12px] after:transition-all peer-checked:bg-[#00f3ff]/20 relative"></div>
+                            </label>
+                            <label class="flex items-center justify-between cursor-pointer group bg-white/5 p-1.5 rounded border border-white/5 hover:border-white/10 transition-colors">
+                                <span class="text-[11px] text-slate-300 group-hover:text-white">地下车库透视</span>
+                                <input type="checkbox" id="toggleParking" class="sr-only peer">
+                                <div class="w-7 h-3.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-slate-400 peer-checked:after:bg-[#00f3ff] after:rounded-full after:h-[12px] after:w-[12px] after:transition-all peer-checked:bg-[#00f3ff]/20 relative"></div>
+                            </label>
+                            <div class="text-[9px] text-slate-500 mt-1 flex items-center gap-1">
+                                <div class="w-1 h-1 bg-[#00f3ff] rounded-full"></div>
+                                提示：点击主建筑楼层可触发垂直爆炸展开
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 tech-border pl-2">外部气象探针</h3>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="bg-black/50 p-2 rounded border border-white/5 flex flex-col items-center">
+                                <div class="text-[9px] text-slate-500 font-mono">TEMP / 温度</div>
+                                <div id="envTemp" class="text-sm font-bold text-[#00f3ff] drop-shadow-[0_0_3px_#00f3ff]">24.0°C</div>
+                            </div>
+                            <div class="bg-black/50 p-2 rounded border border-white/5 flex flex-col items-center">
+                                <div class="text-[9px] text-slate-500 font-mono">HUM / 湿度</div>
+                                <div id="envHum" class="text-sm font-bold text-slate-200">45%</div>
+                            </div>
+                            <div class="bg-black/50 p-2 rounded border border-white/5 flex flex-col items-center">
+                                <div class="text-[9px] text-slate-500 font-mono">WIND / 风速</div>
+                                <div id="envWind" class="text-sm font-bold text-slate-200">3.2 m/s</div>
+                            </div>
+                            <div class="bg-black/50 p-2 rounded border border-white/5 flex flex-col items-center">
+                                <div class="text-[9px] text-slate-500 font-mono">RAD / 辐射</div>
+                                <div id="envSolar" class="text-sm font-bold text-[#f59e0b] drop-shadow-[0_0_3px_#f59e0b]">800 W/m²</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-personnel" class="tab-content space-y-5">
+                    <div>
+                        <h3 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 tech-border pl-2">量子轨迹分析</h3>
+                        <div class="bg-black/40 rounded border border-[#00f3ff]/20 p-3 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-16 h-16 bg-[#00f3ff]/5 rounded-bl-full"></div>
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-[11px] text-slate-300">建筑内总承载</span>
+                                <span id="activeStaffCount" class="text-xl font-bold text-[#00f3ff] drop-shadow-[0_0_5px_#00f3ff] font-mono">0</span>
+                            </div>
+                            <div class="w-full bg-slate-800 rounded-full h-1 mb-3">
+                                <div id="staffBar" class="bg-gradient-to-r from-[#00f3ff]/50 to-[#00f3ff] h-1 rounded-full shadow-[0_0_5px_#00f3ff]" style="width: 0%"></div>
+                            </div>
+                            <div class="space-y-1.5 mt-2 font-mono text-[10px]">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 flex items-center gap-1"><div class="w-1.5 h-1.5 bg-blue-500 rounded-sm"></div>办公矩阵</span>
+                                    <span id="distOffice" class="text-slate-300">0%</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 flex items-center gap-1"><div class="w-1.5 h-1.5 bg-green-500 rounded-sm"></div>协作中枢</span>
+                                    <span id="distMeeting" class="text-slate-300">0%</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 flex items-center gap-1"><div class="w-1.5 h-1.5 bg-orange-500 rounded-sm"></div>补给空间</span>
+                                    <span id="distPantry" class="text-slate-300">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-energy" class="tab-content space-y-5">
+                    <div>
+                        <h3 class="text-[10px] text-slate-500 uppercase tracking-widest mb-2 tech-border pl-2">功率流向 (kW)</h3>
+                        <div class="space-y-3 font-mono text-[10px]">
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-cyan-400">HVAC/制冷</span><span id="enCooling">0</span></div>
+                                <div class="w-full bg-slate-800 h-1"><div id="barCooling" class="bg-cyan-400 h-1 shadow-[0_0_5px_currentColor] transition-all" style="width: 20%"></div></div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-rose-500">HVAC/供暖</span><span id="enHeating">0</span></div>
+                                <div class="w-full bg-slate-800 h-1"><div id="barHeating" class="bg-rose-500 h-1 shadow-[0_0_5px_currentColor] transition-all" style="width: 10%"></div></div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-yellow-400">光环境照明</span><span id="enLighting">0</span></div>
+                                <div class="w-full bg-slate-800 h-1"><div id="barLighting" class="bg-yellow-400 h-1 shadow-[0_0_5px_currentColor] transition-all" style="width: 50%"></div></div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><span class="text-emerald-400">服务器&终端</span><span id="enEquip">0</span></div>
+                                <div class="w-full bg-slate-800 h-1"><div id="barEquip" class="bg-emerald-400 h-1 shadow-[0_0_5px_currentColor] transition-all" style="width: 80%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        function scaleWrapper() {
+            const wrapper = document.getElementById('app-wrapper');
+            const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            wrapper.style.transform = `scale(${scale})`;
+        }
+        window.addEventListener('resize', scaleWrapper);
+        scaleWrapper();
+
+        let scene, camera, renderer, composer, controls;
+        let ambientLight, directionalLight, hemiLight;
+        
+        const buildingFloors = [];
+        const rooms = [];
+        const peopleList = [];
+        const windows = [];
+        const heatmapBlocks = [];
+        let parkingGroup, groundMesh, surroundingsGroup;
+        
+        let currentMode = 'default';
+        let showZones = false;
+        let showParking = false;
+        let timeOfDay = 12.0;
+
+        let extractedFloor = null;
+        let selectedRoom = null;
+        let hoveredRoom = null; 
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let gsapTargetY = 10; 
+        const FLOOR_HEIGHT = 4.2;
+
+        const COLORS = {
+            office: 0x0055ff,
+            meeting: 0x00ff88,
+            pantry: 0xffaa00,
+            core: 0x222233,
+            furniture: 0x64748b, 
+            person: 0xff2244, 
+            glass: 0x00f3ff,
+            slab: 0x1e293b, 
+            neonEdge: 0x00f3ff,
+            dimmed: 0x0a0f1a,
+            hoverGlow: 0x0088ff
+        };
+
+        const glowCyan = new THREE.Color(0x00f3ff).multiplyScalar(2.0);
+        const glowOrange = new THREE.Color(0xffaa00).multiplyScalar(2.0);
+        const glowGreen = new THREE.Color(0x00ff88).multiplyScalar(2.0);
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030610);
+            scene.fog = new THREE.FogExp2(0x030610, 0.003);
+
+            camera = new THREE.PerspectiveCamera(40, 1920 / 1080, 0.1, 1000);
+            camera.position.set(50, 45, 65);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(1920, 1080);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0; 
+            container.appendChild(renderer.domElement);
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(1920, 1080), 0.8, 0.4, 1.05);
+            composer.addPass(bloomPass);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 10, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02; 
+            controls.minDistance = 20;
+            controls.maxDistance = 200;
+
+            ambientLight = new THREE.AmbientLight(0x2a3b5c, 2.0); 
+            scene.add(ambientLight);
+
+            directionalLight = new THREE.DirectionalLight(0xe2f1ff, 1.5); 
+            directionalLight.position.set(40, 80, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.bias = -0.0005; 
+            scene.add(directionalLight);
+
+            buildEnvironment();
+            buildParking();
+            buildArchitecture();
+            generatePeople(); 
+
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointermove', onPointerMove);
+            bindUIEvents();
+
+            updateEnvironmentTime();
+            updateViewMode();
+        }
+
+        function buildEnvironment() {
+            const groundGeo = new THREE.PlaneGeometry(400, 400);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x050a12, roughness: 1.0, metalness: 0.0 });
+            groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.position.y = -0.1;
+            groundMesh.receiveShadow = true;
+            scene.add(groundMesh);
+
+            const gridHelper = new THREE.GridHelper(400, 100, 0x004488, 0x001133);
+            gridHelper.position.y = -0.05;
+            scene.add(gridHelper);
+
+            surroundingsGroup = new THREE.Group();
+            scene.add(surroundingsGroup);
+
+            const buildingGeo = new THREE.BoxGeometry(1, 1, 1);
+            const buildingMat = new THREE.MeshStandardMaterial({ color: 0x0a101f, roughness: 0.9, metalness: 0.1 });
+            const edgeMat = new THREE.LineBasicMaterial({ color: 0x004488, transparent: true, opacity: 0.4 }); 
+            
+            for(let i=0; i<80; i++) {
+                const w = 2 + Math.random() * 6;
+                const d = 2 + Math.random() * 6;
+                const h = 2 + Math.random() * 12; 
+                const x = (Math.random() - 0.5) * 200;
+                const z = (Math.random() - 0.5) * 200;
+
+                if (Math.abs(x) < 30 && Math.abs(z) < 25) continue; 
+
+                const bMesh = new THREE.Mesh(buildingGeo, buildingMat);
+                bMesh.scale.set(w, h, d);
+                bMesh.position.set(x, h/2 - 0.1, z);
+                bMesh.castShadow = true;
+                bMesh.receiveShadow = true;
+
+                const edges = new THREE.EdgesGeometry(buildingGeo);
+                const line = new THREE.LineSegments(edges, edgeMat);
+                bMesh.add(line);
+
+                surroundingsGroup.add(bMesh);
+            }
+        }
+
+        function buildParking() {
+            parkingGroup = new THREE.Group();
+            parkingGroup.position.y = -FLOOR_HEIGHT - 0.1; 
+            scene.add(parkingGroup);
+
+            const pFloorGeo = new THREE.PlaneGeometry(30, 15);
+            const pFloorMat = new THREE.MeshStandardMaterial({ color: 0x0a101f, roughness: 1.0 });
+            const pFloor = new THREE.Mesh(pFloorGeo, pFloorMat);
+            pFloor.rotation.x = -Math.PI / 2;
+            pFloor.receiveShadow = true;
+            parkingGroup.add(pFloor);
+
+            const carGeo = new THREE.BoxGeometry(2, 1, 4);
+            const carColors = [glowCyan, new THREE.Color(0xff0055).multiplyScalar(2.0), glowGreen, glowOrange];
+            
+            for(let x = -12; x <= 12; x += 3.5) {
+                [-4, 4].forEach(z => {
+                    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 4), new THREE.MeshBasicMaterial({ color: 0x334455 }));
+                    line.rotation.x = -Math.PI/2;
+                    line.position.set(x, 0.01, z);
+                    parkingGroup.add(line);
+
+                    if(Math.random() > 0.4) {
+                        const color = carColors[Math.floor(Math.random()*carColors.length)];
+                        const cmat = new THREE.MeshStandardMaterial({ color: 0x111a22, metalness: 0.2, roughness: 0.8 });
+                        const car = new THREE.Mesh(carGeo, cmat);
+                        car.position.set(x + 1.75, 0.5, z);
+                        car.castShadow = true;
+                        
+                        const lightGeo = new THREE.BoxGeometry(1.8, 0.1, 4.1);
+                        const lightMat = new THREE.MeshBasicMaterial({ color: color });
+                        const light = new THREE.Mesh(lightGeo, lightMat);
+                        light.position.y = -0.2;
+                        car.add(light);
+
+                        parkingGroup.add(car);
+                    }
+                });
+            }
+        }
+
+        function buildArchitecture() {
+            for(let i = 0; i < 4; i++) {
+                createFloorGroup(i);
+            }
+        }
+
+        function createFloorGroup(level) {
+            const floorGroup = new THREE.Group();
+            floorGroup.position.y = level * FLOOR_HEIGHT;
+            floorGroup.userData = { type: 'floor', level: level, originalY: level * FLOOR_HEIGHT };
+            scene.add(floorGroup);
+            buildingFloors.push(floorGroup);
+
+            const slabGeo = new THREE.BoxGeometry(30.2, 0.2, 15.2);
+            const slabMat = new THREE.MeshStandardMaterial({ color: COLORS.slab, metalness: 0.5, roughness: 0.5 });
+            const slab = new THREE.Mesh(slabGeo, slabMat);
+            slab.position.y = 0; 
+            slab.castShadow = true;
+            slab.receiveShadow = true;
+            slab.userData = { selectable: true, parentGroup: floorGroup };
+            floorGroup.add(slab);
+            
+            const edgeLine = new THREE.LineSegments(
+                new THREE.EdgesGeometry(slabGeo),
+                new THREE.LineBasicMaterial({ color: glowCyan, transparent: true, opacity: 0.6 })
+            );
+            slab.add(edgeLine);
+
+            if (level === 3) {
+                // 已移除 createServerRoom(floorGroup); 解决屋顶方形物体问题
+                createRoofDetails(floorGroup); 
+                return;
+            }
+
+            createRoom(floorGroup, 0, 0, 6, 6, 'core', '计算核心');
+            
+            const glassGeo = new THREE.BoxGeometry(30, 3.75, 15);
+            const glassMat = new THREE.MeshStandardMaterial({ 
+                color: 0x004488, transparent: true, opacity: 0.12, 
+                roughness: 0.0, metalness: 0.5, side: THREE.DoubleSide
+            });
+            const glass = new THREE.Mesh(glassGeo, glassMat);
+            glass.position.y = 2.075;
+            glass.userData.isGlass = true;
+            floorGroup.add(glass);
+            windows.push(glassMat); 
+
+            const frameGeo = new THREE.BoxGeometry(0.1, 3.75, 0.1);
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 });
+            for(let x = -15; x <= 15; x+=3) {
+                const f1 = new THREE.Mesh(frameGeo, frameMat); f1.position.set(x, 2.075, 7.5);
+                const f2 = new THREE.Mesh(frameGeo, frameMat); f2.position.set(x, 2.075, -7.5);
+                floorGroup.add(f1, f2);
+            }
+            for(let z = -7.5; z <= 7.5; z+=3) {
+                const f3 = new THREE.Mesh(frameGeo, frameMat); f3.position.set(15, 2.075, z);
+                const f4 = new THREE.Mesh(frameGeo, frameMat); f4.position.set(-15, 2.075, z);
+                floorGroup.add(f3, f4);
+            }
+
+            if (level === 0) {
+                createRoom(floorGroup, -9, 0, 12, 14.5, 'office', '展示接待区');
+                createRoom(floorGroup, 9, 0, 12, 14.5, 'meeting', '等候交流区');
+                createLobbyDetails(floorGroup);
+            } else {
+                createRoom(floorGroup, -9, 0, 12, 14.5, 'office', '研发矩阵');
+                createRoom(floorGroup, 9, 3.75, 12, 7, 'meeting', '全息会议室');
+                createRoom(floorGroup, 9, -3.75, 12, 7, 'pantry', '能量补给站');
+                createOfficeDetails(floorGroup);
+            }
+        }
+
+        function createRoofDetails(floorGroup) {
+            const padGeo = new THREE.CylinderGeometry(4, 4, 0.2, 32);
+            const padMat = new THREE.MeshStandardMaterial({ color: 0x111827 });
+            const pad = new THREE.Mesh(padGeo, padMat);
+            pad.position.set(-8, 0.2, 0);
+            floorGroup.add(pad);
+            const hMat = new THREE.MeshBasicMaterial({ color: glowCyan });
+            const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 3), hMat); h1.position.set(-1.5, 0.31, 0);
+            const h2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 3), hMat); h2.position.set(1.5, 0.31, 0);
+            const h3 = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.05, 0.5), hMat); h3.position.set(0, 0.31, 0);
+            pad.add(h1, h2, h3);
+
+            const antBaseGeo = new THREE.BoxGeometry(2, 1, 2);
+            const antBase = new THREE.Mesh(antBaseGeo, new THREE.MeshStandardMaterial({color: 0x1e293b}));
+            antBase.position.set(12, 0.6, 4);
+            const antennaGeo = new THREE.CylinderGeometry(0.05, 0.05, 4);
+            const antenna = new THREE.Mesh(antennaGeo, new THREE.MeshStandardMaterial({color: 0xffffff}));
+            antenna.position.set(0, 2.5, 0);
+            const redLight = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({color: new THREE.Color(0xff0000).multiplyScalar(2)}));
+            redLight.position.set(0, 2, 0);
+            antenna.add(redLight);
+            antBase.add(antenna);
+            floorGroup.add(antBase);
+        }
+
+        function createRoom(parentGroup, x, z, w, d, type, name) {
+            const roomGroup = new THREE.Group();
+            roomGroup.position.set(x, 0, z);
+            parentGroup.add(roomGroup);
+
+            const floorGeo = new THREE.PlaneGeometry(w - 0.2, d - 0.2);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 1.0 });
+            const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+            floorMesh.rotation.x = -Math.PI / 2;
+            floorMesh.position.y = 0.11;
+            floorMesh.receiveShadow = true;
+            floorMesh.userData = { selectable: true, parentGroup: parentGroup, roomGroup: roomGroup, type: type };
+            roomGroup.add(floorMesh);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
+            const w1 = new THREE.Mesh(new THREE.BoxGeometry(w, 3.7, 0.05), wallMat); w1.position.set(0, 2.05, -d/2);
+            const w2 = new THREE.Mesh(new THREE.BoxGeometry(w, 3.7, 0.05), wallMat); w2.position.set(0, 2.05, d/2);
+            const w3 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 3.7, d), wallMat); w3.position.set(-w/2, 2.05, 0);
+            const w4 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 3.7, d), wallMat); w4.position.set(w/2, 2.05, 0);
+            roomGroup.add(w1, w2, w3, w4);
+
+            const lines = [w1, w2, w3, w4];
+            lines.forEach(mesh => {
+                const edges = new THREE.EdgesGeometry(mesh.geometry);
+                const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: glowCyan, transparent: true, opacity: 0.2 }));
+                mesh.add(line);
+            });
+
+            const heatGeo = new THREE.BoxGeometry(w - 0.3, 3.7, d - 0.3);
+            const heatMat = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending 
+            });
+            const heatBlock = new THREE.Mesh(heatGeo, heatMat);
+            heatBlock.position.y = 1.97;
+            heatBlock.visible = false;
+            heatBlock.userData = { type: type, baseTemp: 22 + Math.random()*3 };
+            roomGroup.add(heatBlock);
+            heatmapBlocks.push(heatBlock);
+
+            const roomObj = { group: roomGroup, floorMesh: floorMesh, type: type, name: name };
+            rooms.push(roomObj);
+            return roomObj;
+        }
+
+        function createOfficeChair(group, x, z, rotY) {
+            const chairMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const chairGroup = new THREE.Group();
+            chairGroup.position.set(x, 0.11, z);
+            chairGroup.rotation.y = rotY;
+            
+            const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.5), chairMat);
+            seat.position.y = 0.45;
+            chairGroup.add(seat);
+            const back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.1), chairMat);
+            back.position.set(0, 0.8, -0.2);
+            chairGroup.add(back);
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), chairMat);
+            stem.position.y = 0.2;
+            chairGroup.add(stem);
+
+            group.add(chairGroup);
+        }
+
+        function createLobbyDetails(floorGroup) {
+            const holoGeo = new THREE.SphereGeometry(1.5, 16, 16);
+            const holoMat = new THREE.MeshBasicMaterial({ color: glowCyan, wireframe: true, transparent: true, opacity: 0.3 });
+            const holo = new THREE.Mesh(holoGeo, holoMat);
+            holo.position.set(-8, 1.8, 3);
+            floorGroup.add(holo);
+
+            const deskGeo = new THREE.CylinderGeometry(2.5, 2.5, 1, 32, 1, true, 0, Math.PI);
+            const deskMat = new THREE.MeshStandardMaterial({ color: COLORS.furniture, side: THREE.DoubleSide, metalness: 0.1, roughness: 0.9 });
+            const desk = new THREE.Mesh(deskGeo, deskMat);
+            desk.position.set(-8, 0.6, 3);
+            desk.rotation.y = -Math.PI / 2;
+            floorGroup.add(desk);
+
+            for(let i=0; i<4; i++) {
+                const gate = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 1.5), deskMat);
+                gate.position.set(-3, 0.7, -2 + i*1.5);
+                floorGroup.add(gate);
+                const light = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 1), new THREE.MeshBasicMaterial({ color: glowGreen }));
+                light.position.y = 0.6;
+                gate.add(light);
+            }
+        }
+
+        function createOfficeDetails(floorGroup) {
+            const furnMat = new THREE.MeshStandardMaterial({ color: COLORS.furniture, metalness: 0.1, roughness: 0.9 });
+            const screenMat = new THREE.MeshBasicMaterial({ color: glowCyan }); 
+            
+            for(let x = -13; x <= -5; x+=2.5) {
+                for(let z = -5; z <= 5; z+=3) {
+                    const group = new THREE.Group();
+                    group.position.set(x, 0.11, z);
+                    
+                    const table = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 1), furnMat);
+                    table.position.y = 0.7;
+                    table.castShadow = true;
+                    group.add(table);
+                    
+                    const monitor1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), screenMat);
+                    monitor1.position.set(-0.3, 0.9, -0.2);
+                    monitor1.rotation.y = Math.PI / 6;
+                    group.add(monitor1);
+
+                    const monitor2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), screenMat);
+                    monitor2.position.set(0.3, 0.9, -0.2);
+                    monitor2.rotation.y = -Math.PI / 6;
+                    group.add(monitor2);
+                    
+                    const pc = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.4), new THREE.MeshStandardMaterial({color: 0x1e293b, roughness: 0.9}));
+                    pc.position.set(-0.6, 0.25, 0.2);
+                    const pclight = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.3), new THREE.MeshBasicMaterial({color: glowCyan}));
+                    pclight.position.set(0, 0, 0.21);
+                    pc.add(pclight);
+                    group.add(pc);
+
+                    floorGroup.add(group);
+                    
+                    createOfficeChair(floorGroup, x, z + 0.8, Math.PI);
+                }
+            }
+
+            const mTable = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.8, 16), furnMat);
+            mTable.position.set(9, 0.5, 3.75);
+            mTable.castShadow = true;
+            floorGroup.add(mTable);
+            
+            for(let a=0; a<Math.PI*2; a+=Math.PI/4) {
+                createOfficeChair(floorGroup, 9 + Math.cos(a)*2.2, 3.75 + Math.sin(a)*2.2, -a - Math.PI/2);
+            }
+
+            const tvMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            const tv = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 0.1), tvMat);
+            tv.position.set(9, 1.8, 0.3); 
+            const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.8), new THREE.MeshBasicMaterial({color: glowCyan, map: generateScreenTexture()}));
+            tvScreen.position.set(0, 0, 0.06);
+            tv.add(tvScreen);
+            floorGroup.add(tv);
+
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(3, 1.1, 0.8), furnMat);
+            bar.position.set(12, 0.66, -6);
+            floorGroup.add(bar);
+            const waterDispenser = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 0.4), new THREE.MeshStandardMaterial({color: 0xd1d5db}));
+            waterDispenser.position.set(14, 0.61, -6);
+            const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.4), new THREE.MeshStandardMaterial({color: 0x3b82f6, transparent: true, opacity: 0.6}));
+            bottle.position.set(14, 1.31, -6);
+            floorGroup.add(waterDispenser, bottle);
+
+            for(let i=0; i<2; i++) {
+                const vm = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.8), new THREE.MeshStandardMaterial({color: 0x1e293b, roughness: 0.9}));
+                vm.position.set(14, 1.11, -4.5 + i*1.2);
+                const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1), new THREE.MeshBasicMaterial({color: glowOrange}));
+                screen.position.set(-0.51, 0.3, 0);
+                screen.rotation.y = -Math.PI/2;
+                vm.add(screen);
+                floorGroup.add(vm);
+            }
+        }
+
+        function generateScreenTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#002244'; ctx.fillRect(0,0,512,256);
+            ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 2;
+            for(let i=0; i<10; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i*50, 256); ctx.lineTo(i*50, 256 - Math.random()*200);
+                ctx.stroke();
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function generatePeople() {
+            const pMat = new THREE.MeshStandardMaterial({ color: COLORS.person, roughness: 0.5 });
+            
+            [0, 1, 2].forEach(level => {
+                const floorGroup = buildingFloors[level];
+                for(let i=0; i<12; i++) {
+                    const pGroup = new THREE.Group();
+                    
+                    const legGeo = new THREE.BoxGeometry(0.12, 0.7, 0.12);
+                    const lLeg = new THREE.Mesh(legGeo, pMat); lLeg.position.set(-0.1, 0.35, 0);
+                    const rLeg = new THREE.Mesh(legGeo, pMat); rLeg.position.set(0.1, 0.35, 0);
+                    
+                    const torsoGeo = new THREE.BoxGeometry(0.35, 0.6, 0.15);
+                    const torso = new THREE.Mesh(torsoGeo, pMat); torso.position.set(0, 1.0, 0);
+                    
+                    const headGeo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+                    const head = new THREE.Mesh(headGeo, pMat); head.position.set(0, 1.45, 0);
+
+                    pGroup.add(lLeg, rLeg, torso, head);
+                    
+                    pGroup.position.y = 0.11;
+                    
+                    let deskSpot, meetingSpot, pantrySpot;
+                    if (level === 0) {
+                        deskSpot = new THREE.Vector3(-8 + Math.random()*4, 0.11, 3 + Math.random()*3); 
+                        meetingSpot = new THREE.Vector3(9 + Math.random()*4, 0.11, 3 + Math.random()*3); 
+                        pantrySpot = new THREE.Vector3(-3, 0.11, -2); 
+                    } else {
+                        deskSpot = new THREE.Vector3(-12 + Math.random()*8, 0.11, -4 + Math.random()*8);
+                        meetingSpot = new THREE.Vector3(9 + Math.random()*2, 0.11, 3.75 + Math.random()*2);
+                        pantrySpot = new THREE.Vector3(12 + Math.random()*2, 0.11, -5 + Math.random()*2);
+                    }
+
+                    pGroup.position.copy(deskSpot);
+                    
+                    pGroup.userData = {
+                        level: level, desk: deskSpot, meeting: meetingSpot, pantry: pantrySpot,
+                        target: deskSpot.clone()
+                    };
+                    
+                    floorGroup.add(pGroup);
+                    peopleList.push(pGroup);
+                }
+            });
+        }
+
+        function bindUIEvents() {
+            document.getElementById('timeSlider').addEventListener('input', (e) => {
+                timeOfDay = parseFloat(e.target.value);
+                updateEnvironmentTime();
+            });
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.tab-btn').forEach(b => {
+                        b.classList.replace('text-[#00f3ff]', 'text-slate-500');
+                        b.classList.remove('border-[#00f3ff]', 'bg-[#00f3ff]/5');
+                    });
+                    const target = e.target;
+                    target.classList.replace('text-slate-500', 'text-[#00f3ff]');
+                    target.classList.add('border-[#00f3ff]', 'bg-[#00f3ff]/5');
+                    
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(target.dataset.target).classList.add('active');
+                });
+            });
+
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.view-mode-btn').forEach(b => {
+                        b.className = 'view-mode-btn bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 rounded py-1 text-[10px] font-mono transition-all';
+                    });
+                    e.target.className = 'view-mode-btn bg-[#00f3ff]/20 text-[#00f3ff] border border-[#00f3ff]/50 rounded py-1 text-[10px] font-mono shadow-[0_0_10px_rgba(0,243,255,0.2)]';
+                    currentMode = e.target.dataset.mode;
+                    updateViewMode();
+                });
+            });
+
+            document.getElementById('toggleZones').addEventListener('change', (e) => {
+                showZones = e.target.checked;
+                updateRoomVisuals();
+            });
+
+            document.getElementById('toggleParking').addEventListener('change', (e) => {
+                showParking = e.target.checked;
+                groundMesh.visible = !showParking;
+                surroundingsGroup.visible = !showParking;
+                if(showParking) {
+                    controls.maxPolarAngle = Math.PI;
+                    gsapTargetY = -2;
+                } else {
+                    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+                    gsapTargetY = 10;
+                }
+            });
+
+            document.getElementById('closeExplodeBtn').addEventListener('click', () => {
+                extractedFloor = null;
+                selectedRoom = null;
+                gsapTargetY = showParking ? -2 : 10;
+                document.getElementById('closeExplodeBtn').classList.add('opacity-0', 'pointer-events-none');
+                updateRoomVisuals();
+            });
+        }
+
+        function onPointerDown(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            let clickedFloorGroup = null;
+            let clickedRoomFloor = null;
+
+            for(let i=0; i<intersects.length; i++) {
+                const obj = intersects[i].object;
+                if(obj.userData.selectable) {
+                    clickedFloorGroup = obj.userData.parentGroup;
+                    if(obj.userData.roomGroup) clickedRoomFloor = obj;
+                    break;
+                }
+            }
+
+            if(clickedFloorGroup) {
+                if(!extractedFloor) {
+                    extractedFloor = clickedFloorGroup;
+                    selectedRoom = clickedRoomFloor;
+                    // 加上上浮的补偿高度 5
+                    gsapTargetY = clickedFloorGroup.userData.originalY + 5; 
+                    document.getElementById('closeExplodeBtn').classList.remove('opacity-0', 'pointer-events-none');
+                } else if(extractedFloor === clickedFloorGroup) {
+                    if(clickedRoomFloor && selectedRoom !== clickedRoomFloor) {
+                        selectedRoom = clickedRoomFloor;
+                    }
+                }
+            }
+            updateRoomVisuals();
+        }
+
+        function onPointerMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            let foundRoom = null;
+            for(let i=0; i<intersects.length; i++) {
+                if(intersects[i].object.userData.selectable && intersects[i].object.userData.roomGroup) {
+                    foundRoom = intersects[i].object;
+                    break;
+                }
+            }
+
+            if(hoveredRoom !== foundRoom) {
+                hoveredRoom = foundRoom;
+                document.body.style.cursor = foundRoom ? 'pointer' : 'default';
+                updateRoomVisuals();
+            }
+        }
+
+        function updateRoomVisuals() {
+            rooms.forEach(r => {
+                const mat = r.floorMesh.material;
+                mat.emissive.setHex(0x000000);
+                mat.emissiveIntensity = 0;
+                
+                if(selectedRoom && selectedRoom.userData.roomGroup === r.group) {
+                    mat.emissive.setHex(COLORS.glass);
+                    mat.emissiveIntensity = 2.0; 
+                } else if(hoveredRoom && hoveredRoom.userData.roomGroup === r.group) {
+                    mat.emissive.setHex(COLORS.hoverGlow);
+                    mat.emissiveIntensity = 0.6; 
+                }
+
+                if(showZones) {
+                    mat.color.setHex(COLORS[r.type] || 0x111827);
+                } else {
+                    mat.color.setHex(0x111827);
+                }
+            });
+        }
+
+        function updateViewMode() {
+            const isHeatmap = currentMode === 'heatmap';
+            const isPeople = currentMode === 'people';
+
+            heatmapBlocks.forEach(b => b.visible = isHeatmap);
+
+            buildingFloors.forEach(f => {
+                f.traverse(child => {
+                    if(child.isMesh && child.material && !child.userData.isGlass) {
+                        if(!child.userData.originalColor) child.userData.originalColor = child.material.color.getHex();
+                        
+                        if(isPeople) {
+                            child.material.color.setHex(0x050a12);
+                            if(child.material.transparent !== undefined) {
+                                child.material.transparent = true;
+                                child.material.opacity = 0.2;
+                            }
+                        } else {
+                            child.material.color.setHex(child.userData.originalColor);
+                            if(child.material.transparent !== undefined && child.material.opacity === 0.2) {
+                                child.material.transparent = false;
+                                child.material.opacity = 1.0;
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        function updateEnvironmentTime() {
+            const hours = Math.floor(timeOfDay);
+            const mins = Math.floor((timeOfDay - hours) * 60);
+            document.getElementById('timeDisplay').innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+
+            const blend = Math.sin(((timeOfDay - 6) / 12) * Math.PI); 
+            const isDay = timeOfDay >= 6 && timeOfDay <= 18;
+            
+            const temp = 20 + (isDay ? blend * 6 : -2);
+            document.getElementById('envTemp').innerText = `${temp.toFixed(1)}°C`;
+            document.getElementById('envSolar').innerText = isDay ? `${Math.floor(blend * 1200)} W/m²` : '0 W/m²';
+
+            let activeCount = 0;
+            let inOffice = 0, inMeeting = 0, inPantry = 0;
+
+            peopleList.forEach(p => {
+                const r = Math.random();
+                if (timeOfDay < 7 || timeOfDay > 22) {
+                    p.visible = false; 
+                } else {
+                    p.visible = true;
+                    activeCount++;
+                    
+                    if (timeOfDay >= 12 && timeOfDay < 13.5) {
+                        p.userData.target.copy(p.userData.pantry);
+                        inPantry++;
+                    } else if (timeOfDay >= 14 && timeOfDay <= 16) {
+                        if (r > 0.5) {
+                            p.userData.target.copy(p.userData.meeting);
+                            inMeeting++;
+                        } else {
+                            p.userData.target.copy(p.userData.desk);
+                            inOffice++;
+                        }
+                    } else {
+                        p.userData.target.copy(p.userData.desk);
+                        inOffice++;
+                    }
+                    
+                    p.userData.target.x += (Math.random() - 0.5) * 1.0;
+                    p.userData.target.z += (Math.random() - 0.5) * 1.0;
+                }
+            });
+
+            document.getElementById('activeStaffCount').innerText = activeCount;
+            document.getElementById('staffBar').style.width = `${(activeCount / peopleList.length) * 100}%`;
+            
+            if (activeCount > 0) {
+                document.getElementById('distOffice').innerText = `${Math.round(inOffice/activeCount*100)}%`;
+                document.getElementById('distMeeting').innerText = `${Math.round(inMeeting/activeCount*100)}%`;
+                document.getElementById('distPantry').innerText = `${Math.round(inPantry/activeCount*100)}%`;
+            } else {
+                ['distOffice', 'distMeeting', 'distPantry'].forEach(id => document.getElementById(id).innerText = '0%');
+            }
+
+            const hvacLoad = blend * 80 + (activeCount > 0 ? 40 : 10);
+            document.getElementById('enCooling').innerText = `${Math.floor(hvacLoad)} kW`;
+            document.getElementById('barCooling').style.width = `${Math.min(hvacLoad, 100)}%`;
+            
+            const lightLoad = !isDay && activeCount > 0 ? 60 : (activeCount > 0 ? 20 : 5);
+            document.getElementById('enLighting').innerText = `${lightLoad} kW`;
+            document.getElementById('barLighting').style.width = `${lightLoad}%`;
+            
+            const equipLoad = activeCount * 4 + 30;
+            document.getElementById('enEquip').innerText = `${equipLoad} kW`;
+            document.getElementById('barEquip').style.width = `${Math.min(equipLoad/1.5, 100)}%`;
+
+            heatmapBlocks.forEach(b => {
+                let heat = b.userData.baseTemp;
+                if(b.userData.type === 'office' && activeCount > 0) heat += 2;
+                if(b.userData.type === 'meeting' && inMeeting > 5) heat += 4;
+                if(b.userData.type === 'pantry' && inPantry > 5) heat += 3;
+                
+                const norm = Math.max(0, Math.min(1, (heat - 20) / 10)); 
+                b.material.color.setHSL((1 - norm) * 0.66, 1.0, 0.5);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            controls.target.y += (gsapTargetY - controls.target.y) * 0.05;
+
+            buildingFloors.forEach(floor => {
+                let targetY = floor.userData.originalY;
+                const isSelected = (floor === extractedFloor);
+                const isExploded = (extractedFloor !== null);
+
+                if (isExploded) {
+                    const selLevel = extractedFloor.userData.level;
+                    const myLevel = floor.userData.level;
+                    
+                    // 修正后的爆破逻辑：选中层上浮 5，上面层更高，下面层不动
+                    if (myLevel > selLevel) {
+                        targetY = myLevel * FLOOR_HEIGHT + 15 + (myLevel - selLevel)*5;
+                    } else if (myLevel === selLevel) {
+                        targetY = myLevel * FLOOR_HEIGHT + 5; 
+                    } else {
+                        targetY = myLevel * FLOOR_HEIGHT;
+                    }
+                }
+
+                floor.position.y += (targetY - floor.position.y) * 0.1;
+
+                floor.traverse(child => {
+                    if (child.isMesh && child.material && !child.userData.isGlass && currentMode !== 'people') {
+                        if(!child.userData.originalColor) child.userData.originalColor = child.material.color.getHex();
+                        
+                        const shouldDim = isExploded && !isSelected;
+                        
+                        const targetColorHex = shouldDim ? COLORS.dimmed : child.userData.originalColor;
+                        child.material.color.lerp(new THREE.Color(targetColorHex), 0.1);
+
+                        if (shouldDim && !child.userData.isGlass) {
+                            child.material.transparent = true;
+                            child.material.opacity += (0.3 - child.material.opacity) * 0.1;
+                        } else if (!shouldDim && !child.userData.isGlass) {
+                            child.material.opacity += (1.0 - child.material.opacity) * 0.1;
+                            if(child.material.opacity > 0.95) child.material.transparent = false;
+                        }
+                    }
+                });
+            });
+
+            peopleList.forEach(p => {
+                if(p.visible) {
+                    const dx = p.userData.target.x - p.position.x;
+                    const dz = p.userData.target.z - p.position.z;
+                    if(Math.abs(dx) > 0.1 || Math.abs(dz) > 0.1) {
+                        const targetAngle = Math.atan2(dx, dz);
+                        p.rotation.y += (targetAngle - p.rotation.y) * 0.1;
+                    }
+                    p.position.lerp(p.userData.target, 0.03);
+                }
+            });
+            
+            buildingFloors[0].children.forEach(c => {
+                if(c.geometry && c.geometry.type === 'SphereGeometry') c.rotation.y += 0.01;
+            });
+            
+            buildingFloors.forEach(f => f.children.forEach(c => {
+                if(c.material && c.material.blending === THREE.AdditiveBlending && c.geometry && c.geometry.type === 'CylinderGeometry') {
+                    c.material.opacity = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+                }
+            }));
+
+            controls.update();
+            composer.render();
+        }
+    </script>
+</body>
+</html>
