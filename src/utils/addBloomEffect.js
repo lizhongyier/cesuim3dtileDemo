@@ -14,8 +14,8 @@ const addBloomEffect = (scene, Cesium) => {
   const viewModel = {
     show: true,
     glowOnly: false,
-    contrast: 8,
-    brightness: -0.3,
+    contrast: 124,
+    brightness: -0.25,
     delta: 1.0,
     sigma: 2.2,
     stepSize: 1.5

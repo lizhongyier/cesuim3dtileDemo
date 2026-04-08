@@ -35,13 +35,13 @@ const buildingParameters = {
   // 顶部颜色 (默认亮青色)
   endColor: {
     red: 0.4,
-    green: 0.4,
-    blue: 0.5,
+    green: 0.45,
+    blue: 0.55,
   },
   // 最小高度 (用于归一化)
   minHeight: 0.0,
   // 最大高度 (用于归一化)
-  maxHeight: 25.0,
+  maxHeight: 18.0,
   // 渐变强度 (0-1, 1为完全渐变，0为纯色)
   gradientIntensity: 1.0,
   // 是否启用高度渐变
@@ -60,8 +60,8 @@ const pipiLineParameters = {
     blue: 0.01,
   },
   metallicScale: 0.2,
-  roughnessScale: 0.8,
-  normalScale: 0.0,
+  roughnessScale: 0.9,
+  normalScale: 0.1,
 };
 
 const heatplantParameters = {
@@ -72,18 +72,18 @@ const heatplantParameters = {
 };
 
 const fenceParameters = {
-  width: 220.0,
-  depth: 220.0,
-  wallHeight: 70.0,
+  width: 260.0,
+  depth: 260.0,
+  wallHeight: 120.0,
   bottomHeight: 6.0, // 墙底部重点线高度
-  baseColor: "#00a8ff", // 底部圆环颜色
-  baseExpandSpeed: 2.0,
-  baseExpandMax: 1.5,
-  wallColor: "#00d2ff", // 墙底部颜色
-  wallOpacity: 0.2, // 从0.6改为0.4，更透明
-  particleColor: "#80e5ff", // 贴图颜色
+  baseColor: "#FF8843", // 底部圆环颜色
+  baseExpandSpeed: 0.6,
+  baseExpandMax: 2.5,
+  wallColor: "#FF8843", // 墙底部颜色
+  wallOpacity: 1, // 从0.6改为0.4，更透明
+  particleColor: "#FF8843", // 贴图颜色
   particleSpeed: 0.5, // 贴图上升速度
-  particleDensity: 35, // 亮度
+  particleDensity: 50, // 亮度
 };
 
 const substationModelMatrix = (coord) => {
@@ -91,6 +91,21 @@ const substationModelMatrix = (coord) => {
     Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
     new Cesium.HeadingPitchRoll(0, 0, 0),
   );
+};
+
+const addBillboard = (coord, height, imgUrl) => {
+  if (!imgUrl) {
+    return;
+  }
+  viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], height),
+    billboard: {
+      image: imgUrl,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      // 距离在2000-10000之间的时候，Billboard的Scale比例按照1->0之间的插值来缩放
+      scaleByDistance: new Cesium.NearFarScalar(2000, 1, 10000, 0),
+    },
+  });
 };
 
 const substationList = ref([]);
@@ -308,7 +323,7 @@ const add3DTiles = () => {
       imageBasedLighting.sphericalHarmonicCoefficients = coefficients;
       imageBasedLighting.specularEnvironmentMaps = environmentMapURL;
       imageBasedLighting.imageBasedLightingFactor = Cesium.Cartesian2.ONE;
-      scene.light.intensity = 0.6; // 环境光
+      scene.light.intensity = 1; // 环境光
       addPipelineTexture();
     }
     if (buildingTile) {
@@ -697,199 +712,6 @@ const makeBuildingCustomShader = () => {
   });
 };
 
-const rebuildFence = () => {
-  // 移除旧的围栏
-  fenceAnimationPrimitives.forEach((primitive) => {
-    viewer.scene.primitives.remove(primitive);
-  });
-  fenceAnimationPrimitives = [];
-
-  // 获取所有热源头实体
-  const heatplantEntities = viewer.entities.values.filter(
-    (e) => e.id && e.id.startsWith("heatplant-"),
-  );
-
-  // 延迟一帧重新创建围栏，确保在模型之后渲染
-  requestAnimationFrame(() => {
-    heatplantEntities.forEach((entity) => {
-      const cartographic = Cesium.Cartographic.fromCartesian(
-        entity.position.getValue(),
-      );
-      const coord = [
-        Cesium.Math.toDegrees(cartographic.longitude),
-        Cesium.Math.toDegrees(cartographic.latitude),
-      ];
-      const properties = {
-        name: entity.name,
-        pid: entity.id.replace("heatplant-", ""),
-      };
-
-      const baseColor = Cesium.Color.fromCssColorString(
-        fenceParameters.baseColor,
-      );
-      const wallColor = Cesium.Color.fromCssColorString(
-        fenceParameters.wallColor,
-      );
-      const particleColor = Cesium.Color.fromCssColorString(
-        fenceParameters.particleColor,
-      );
-
-      const basePrimitive = makeFenceBaseExpand(baseColor, coord, properties);
-      fenceAnimationPrimitives.push(basePrimitive);
-
-      const wallPrimitive = makeFenceWall(wallColor, coord, properties);
-      fenceAnimationPrimitives.push(wallPrimitive);
-
-      // const particlePrimitive = makeFenceParticles(particleColor, coord, properties);
-      // fenceAnimationPrimitives.push(particlePrimitive);
-    });
-  });
-};
-
-const setFenceParameters = () => {
-  const group = gui.addFolder("热源围栏调参");
-  group.open();
-
-  const sizeFolder = group.addFolder("围栏尺寸");
-  sizeFolder.open();
-
-  // 添加onChange回调，触发重建
-  sizeFolder
-    .add(fenceParameters, "width", 50, 300)
-    .name("宽度")
-    .onChange(() => {
-      rebuildFence();
-    });
-  sizeFolder
-    .add(fenceParameters, "depth", 50, 300)
-    .name("深度")
-    .onChange(() => {
-      rebuildFence();
-    });
-  sizeFolder
-    .add(fenceParameters, "wallHeight", 30, 150)
-    .name("围墙高度")
-    .onChange(() => {
-      rebuildFence();
-    });
-
-  const baseFolder = group.addFolder("底部扩散");
-  baseFolder.open();
-  baseFolder
-    .addColor(fenceParameters, "baseColor")
-    .name("颜色")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (p.appearanceRef && p.appearanceRef.uniforms.u_color) {
-          p.appearanceRef.uniforms.u_color = Cesium.Color.fromCssColorString(e);
-        }
-      });
-    });
-  baseFolder
-    .add(fenceParameters, "baseExpandSpeed", 0.5, 5.0)
-    .name("扩散速度")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearanceRef &&
-          p.appearanceRef.uniforms.u_expandSpeed !== undefined
-        ) {
-          p.appearanceRef.uniforms.u_expandSpeed = e;
-        }
-      });
-    });
-  baseFolder
-    .add(fenceParameters, "baseExpandMax", 1.0, 3.0)
-    .name("最大扩散倍数")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearanceRef &&
-          p.appearanceRef.uniforms.u_expandMax !== undefined
-        ) {
-          p.appearanceRef.uniforms.u_expandMax = e;
-        }
-      });
-    });
-
-  const wallFolder = group.addFolder("围墙效果");
-  wallFolder.open();
-  wallFolder
-    .addColor(fenceParameters, "wallColor")
-    .name("颜色")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearanceRef &&
-          p.appearanceRef.uniforms.u_color &&
-          !(p.appearance instanceof Cesium.EllipsoidSurfaceAppearance) &&
-          !(p.appearance instanceof Cesium.MaterialAppearance)
-        ) {
-          p.appearanceRef.uniforms.u_color = Cesium.Color.fromCssColorString(e);
-        }
-      });
-    });
-  wallFolder
-    .add(fenceParameters, "wallOpacity", 0.1, 1.0)
-    .name("透明度")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearanceRef &&
-          p.appearanceRef.uniforms.u_opacity !== undefined
-        ) {
-          p.appearanceRef.uniforms.u_opacity = e;
-        }
-      });
-    });
-
-  const particleFolder = group.addFolder("粒子动画");
-  particleFolder.open();
-  particleFolder
-    .addColor(fenceParameters, "particleColor")
-    .name("粒子颜色")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearance &&
-          p.appearance.material &&
-          p.appearance.material.uniforms.u_color
-        ) {
-          p.appearance.material.uniforms.u_color =
-            Cesium.Color.fromCssColorString(e);
-        }
-      });
-    });
-  particleFolder
-    .add(fenceParameters, "particleSpeed", 0.2, 3.0)
-    .name("上升速度")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearance &&
-          p.appearance.material &&
-          p.appearance.material.uniforms.u_speed !== undefined
-        ) {
-          p.appearance.material.uniforms.u_speed = e;
-        }
-      });
-    });
-  particleFolder
-    .add(fenceParameters, "particleDensity", 5, 50)
-    .name("粒子密度")
-    .onChange((e) => {
-      fenceAnimationPrimitives.forEach((p) => {
-        if (
-          p.appearance &&
-          p.appearance.material &&
-          p.appearance.material.uniforms.u_density !== undefined
-        ) {
-          p.appearance.material.uniforms.u_density = e / 100.0;
-        }
-      });
-    });
-};
-
 const updateFenceAnimation = (time) => {
   fenceAnimationPrimitives.forEach((primitive) => {
     if (primitive.appearanceRef && primitive.appearanceRef.uniforms) {
@@ -957,6 +779,7 @@ const addHeatplants = async () => {
     const heatplantEntities = [];
     points.forEach((feature) => {
       const coord = feature.geometry.coordinates;
+      addBillboard(coord, 150, "/statics/换热站.png");
       const entity = viewer.entities.add({
         id: `heatplant-${feature.properties.pid}`,
         name: `点位 ${feature.properties.name}`,
@@ -1031,12 +854,12 @@ const addHeatplants = async () => {
   }
 };
 
-// ========== 四边形底部扩散动画（修复版） ==========
+// ========== 四边形底部扩散动画 ==========
 const makeFenceBaseExpand = (color, coord, properties) => {
   properties["coord"] = coord;
   const circleGeometry = new Cesium.CircleGeometry({
     center: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0.5),
-    radius: fenceParameters.width / 2, // 波纹扩散半径
+    radius: 180, // 波纹扩散半径
     vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
   });
 
@@ -1087,7 +910,7 @@ const makeFenceBaseExpand = (color, coord, properties) => {
   return primitive;
 };
 
-// ========== 四边形围墙（优化透明度版） ==========
+// ========== 四边形围墙 ==========
 const makeFenceWall = (color, coord, properties) => {
   const width = fenceParameters.width;
   const depth = fenceParameters.depth;
@@ -1469,10 +1292,10 @@ const addSubStations = async () => {
     console.log(data);
     // 换热站颜色
     const colors = [
-      Cesium.Color.fromCssColorString("#D8A200"), // Blue
-      Cesium.Color.fromCssColorString("#D8A200"), // Green
-      Cesium.Color.fromCssColorString("#D8A200"), // Yellow
-      Cesium.Color.fromCssColorString("#D8A200"), // Orange
+      Cesium.Color.fromCssColorString("#B59E07"), // Blue
+      Cesium.Color.fromCssColorString("#B59E07"), // Green
+      Cesium.Color.fromCssColorString("#B59E07"), // Yellow
+      Cesium.Color.fromCssColorString("#B59E07"), // Orange
     ];
     const colorsCss = ["#0088ff", "#00ff00", "#ffaa00", "#FFE366"];
     const points = data.slice(0, 50);
@@ -1486,6 +1309,7 @@ const addSubStations = async () => {
       const cssColor = colorsCss[colorIndex];
       const cylinderHeight = 40.0;
       const properties = feature.properties;
+      addBillboard(coord, 150, "/statics/换热站.png");
       const circlePrimitive = makeCircle(color, coord, properties);
       const pillarPrimitive = makePillar(color, coord, properties);
       makeSpriteAnimation(color, coord);

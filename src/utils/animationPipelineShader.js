@@ -31,7 +31,7 @@ const animationPipelineShader = (pipiLineParameters) => {
 
   const FLOW_CONFIG = {
     speed: 0.2,
-    intensity: 2.5,
+    intensity: 1,
     color: new Cartesian3(pipiLineParameters.flowColor.red, pipiLineParameters.flowColor.green, pipiLineParameters.flowColor.blue),
     uvScale: 1.0, // 整体UV缩放
     repeatX: 0.03, // 新增：横向重复次数（越大=横向越短/密集，越小=横向越长/稀疏）

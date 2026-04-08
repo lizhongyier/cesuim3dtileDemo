@@ -8,10 +8,14 @@ import {
 } from "cesium";
 const pipelineShader = (pipiLineParameters) => {
   const PIPE_TEXTURES = {
-    baseColor: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Color.png",
-    normal: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_NormalGL.png",
+    // baseColor: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Color.png",
+    // normal: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_NormalGL.png",
+    // metallicRoughness:
+    //   "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
+    baseColor: "",
+    normal: "",
     metallicRoughness:
-      "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
+      "",
   };
   const createSolidTexture = (red, green, blue, alpha) => {
     return new TextureUniform({
@@ -25,8 +29,8 @@ const pipelineShader = (pipiLineParameters) => {
   const PIPE_DEBUG_VIEW_VALUES = {
     off: 0,
     "attribute-normal": 1,
-    roughness: 2,
-    metallic: 3,
+    roughness: 1,
+    metallic: 0,
   };
   const customShaderOpt = new CustomShader({
     mode: CustomShaderMode.REPLACE_MATERIAL,
@@ -54,11 +58,12 @@ const pipelineShader = (pipiLineParameters) => {
       },
       u_baseColorTint: {
         type: UniformType.VEC3,
-        value: new Cartesian3(
-          pipiLineParameters.baseColorTint.red,
-          pipiLineParameters.baseColorTint.green,
-          pipiLineParameters.baseColorTint.blue,
-        ),
+        value: new Cartesian3(0.02, 0.1, 0.42),
+        // value: new Cartesian3(
+        //   pipiLineParameters.baseColorTint.red,
+        //   pipiLineParameters.baseColorTint.green,
+        //   pipiLineParameters.baseColorTint.blue,
+        // ),
       },
       u_metallicScale: {
         type: UniformType.FLOAT,
