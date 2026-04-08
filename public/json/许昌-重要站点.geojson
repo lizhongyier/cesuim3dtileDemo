@@ -1,0 +1,142 @@
+{
+  "type": "FeatureCollection",
+  "name": "许昌-重要站点",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": null,
+        "dn": null,
+        "insucount": null,
+        "insuthick": null,
+        "locate": null,
+        "modemethod": null,
+        "name": "旺能电厂",
+        "pid": "2573",
+        "rpid": null,
+        "subType": null,
+        "tubedo": null,
+        "tubelayout": null,
+        "tubelength": null,
+        "tubethick": null
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.742971400533719,
+          34.041662744216524
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "heatplant.2574",
+        "dn": null,
+        "insucount": null,
+        "insuthick": null,
+        "locate": null,
+        "modemethod": null,
+        "name": "宏伟电厂",
+        "pid": "2574",
+        "rpid": null,
+        "subType": null,
+        "tubedo": null,
+        "tubelayout": null,
+        "tubelength": null,
+        "tubethick": null
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.821466783191056,
+          34.070444265226868
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "partprestation.5381",
+        "dn": null,
+        "insucount": null,
+        "insuthick": null,
+        "locate": null,
+        "modemethod": null,
+        "name": "许襄隔压站",
+        "pid": "5381",
+        "rpid": null,
+        "subType": null,
+        "tubedo": null,
+        "tubelayout": null,
+        "tubelength": null,
+        "tubethick": null
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.762183149684731,
+          33.999379965995523
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "partprestation.2",
+        "dn": null,
+        "insucount": null,
+        "insuthick": null,
+        "locate": null,
+        "modemethod": null,
+        "name": "许禹隔压站",
+        "pid": "2",
+        "rpid": null,
+        "subType": null,
+        "tubedo": null,
+        "tubelayout": null,
+        "tubelength": null,
+        "tubethick": null
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.773784217061475,
+          34.045420976558212
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "pump.1867",
+        "dn": null,
+        "insucount": null,
+        "insuthick": null,
+        "locate": null,
+        "modemethod": null,
+        "name": "中继泵站",
+        "pid": "1867",
+        "rpid": null,
+        "subType": null,
+        "tubedo": null,
+        "tubelayout": null,
+        "tubelength": null,
+        "tubethick": null
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.550192590011534,
+          34.110419432486509
+        ]
+      }
+    }
+  ]
+}

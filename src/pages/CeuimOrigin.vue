@@ -3,18 +3,12 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 import * as Cesium from "cesium";
 import CesiumNavigaion from "cesium-navigation-es6";
 import skyBox from "@/utils/skyBox";
-import {
-  Cartesian3,
-  CustomShader,
-  CustomShaderMode,
-  LightingModel,
-  TextureUniform,
-  UniformType,
-} from "cesium";
+import { Cartesian3, UniformType } from "cesium";
 import { addBloomEffect } from "@/utils/addBloomEffect";
 import * as dat from "dat.gui";
 import animationPipelineShader from "@/utils/animationPipelineShader";
 import pipelineShader from "@/utils/pipelineShader";
+import CesiumPopup from "@/utils/cesuimPopup";
 const cesiumContainer = ref(null);
 let viewer = null;
 let scene = null;
@@ -34,19 +28,19 @@ const buildingParameters = {
   // 底部颜色 (默认深蓝色)
   startColor: {
     red: 0.0,
-    green: 0.2,
-    blue: 0.6,
+    green: 0.0,
+    blue: 0.0,
   },
   // 顶部颜色 (默认亮青色)
   endColor: {
-    red: 0.0,
-    green: 0.8,
-    blue: 1.0,
+    red: 0.62,
+    green: 0.67,
+    blue: 0.75,
   },
   // 最小高度 (用于归一化)
   minHeight: 0.0,
   // 最大高度 (用于归一化)
-  maxHeight: 200.0,
+  maxHeight: 25.0,
   // 渐变强度 (0-1, 1为完全渐变，0为纯色)
   gradientIntensity: 1.0,
   // 是否启用高度渐变
@@ -55,18 +49,25 @@ const buildingParameters = {
 
 const pipiLineParameters = {
   baseColorTint: {
-    red: 1.0,
-    green: 1.0,
-    blue: 1.0,
+    red: 0.1,
+    green: 0.11,
+    blue: 0.12,
   },
   flowColor: {
     red: 1.0,
-    green: 0.6,
+    green: 0.5,
     blue: 0.01,
   },
-  metallicScale: 1.0,
-  roughnessScale: 0.32,
-  normalScale: 1.0,
+  metallicScale: 0.2,
+  roughnessScale: 0.8,
+  normalScale: 0.0,
+};
+
+const heatplantParameters = {
+  baseColor: "#D8A200",
+  scale: 600.0, // 根据模型实际尺寸调整
+  colorBlendMode: "HIGHLIGHT", // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
+  colorBlendAmount: 1, // 混色强度（1是纯色，0是模型原色）
 };
 
 const substationModelMatrix = (coord) => {
@@ -85,6 +86,7 @@ onMounted(() => {
   initLight();
   add3DTiles();
   addSubStations();
+  addHeatplants();
 });
 
 const initViewer = () => {
@@ -106,7 +108,7 @@ const initViewer = () => {
   });
   viewer.imageryLayers.addImageryProvider(
     new Cesium.UrlTemplateImageryProvider({
-      // url: "your img tiles url",
+      url: "your img tiles url",
       minimumLevel: 3,
       maximumLevel: 18,
     }),
@@ -290,7 +292,7 @@ const add3DTiles = () => {
       imageBasedLighting.sphericalHarmonicCoefficients = coefficients;
       imageBasedLighting.specularEnvironmentMaps = environmentMapURL;
       imageBasedLighting.imageBasedLightingFactor = Cesium.Cartesian2.ONE;
-      scene.light.intensity = 0.4;
+      scene.light.intensity = 0.6; // 环境光
       addPipelineTexture();
     }
     if (buildingTile) {
@@ -414,7 +416,7 @@ const setBuildingParameters = (shader) => {
 // 更新楼宇Shader的Uniform值
 const updateBuildingShaderUniforms = (shader) => {
   if (!shader) return;
-  
+
   shader.setUniform(
     "u_startColor",
     new Cartesian3(
@@ -433,8 +435,14 @@ const updateBuildingShaderUniforms = (shader) => {
   );
   shader.setUniform("u_minHeight", buildingParameters.minHeight);
   shader.setUniform("u_maxHeight", buildingParameters.maxHeight);
-  shader.setUniform("u_gradientIntensity", buildingParameters.gradientIntensity);
-  shader.setUniform("u_enableGradient", buildingParameters.enableGradient ? 1.0 : 0.0);
+  shader.setUniform(
+    "u_gradientIntensity",
+    buildingParameters.gradientIntensity,
+  );
+  shader.setUniform(
+    "u_enableGradient",
+    buildingParameters.enableGradient ? 1.0 : 0.0,
+  );
 };
 
 const setPipelineParameters = () => {
@@ -636,18 +644,18 @@ const makeBuildingCustomShader = () => {
       void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
         // 获取模型坐标系下的位置
         vec3 positionMC = fsInput.attributes.positionMC;
-        
+
         // 计算高度因子 (0.0 到 1.0)
         float heightRange = u_maxHeight - u_minHeight;
         float heightFactor = 0.0;
-        
+
         if (heightRange > 0.0) {
           heightFactor = clamp((positionMC.z - u_minHeight) / heightRange, 0.0, 1.0);
         }
-        
+
         // 根据高度在起始颜色和结束颜色之间进行线性插值
         vec3 gradientColor = mix(u_startColor, u_endColor, heightFactor);
-        
+
         // 判断是否启用渐变
         vec3 finalColor;
         if (u_enableGradient > 0.5) {
@@ -656,14 +664,14 @@ const makeBuildingCustomShader = () => {
         } else {
           finalColor = material.diffuse;
         }
-        
+
         // 应用最终颜色到 diffuse
         material.diffuse = finalColor;
-        
+
         // 注意：czm_modelMaterial 结构体在这个版本中没有 emission 字段
         // 如果需要发光效果，可以通过调整 baseColor 或 specular 来实现
         // 或者使用 material.emissive（如果存在的话）
-        
+
         // 尝试使用 emissive 如果存在，否则跳过
         #ifdef HAS_EMISSIVE
           material.emissive = finalColor * 0.2;
@@ -711,6 +719,102 @@ const makePipeLieCustomShader = () => {
   return pipelineShader(pipiLineParameters);
 };
 
+const addHeatplants = async () => {
+  // 添加热源
+  try {
+    const res = await fetch("/json/许昌-重要站点.geojson");
+    const data = await res.json();
+
+    const points = data.features;
+    const modelUri = "/models/热源模型.glb";
+    points.forEach((feature) => {
+      const coord = feature.geometry.coordinates;
+      viewer.entities.add({
+        id: `heatplant-${feature.properties.pid}`,
+        name: `点位 ${feature.properties.name}`,
+        position: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
+        model: {
+          uri: modelUri,
+          // scale: heatplantParameters.scale, // 根据模型实际尺寸调整
+          scale: new Cesium.CallbackProperty(
+            () => heatplantParameters.scale,
+            false,
+          ), // 根据模型实际尺寸调整
+          // minimumPixelSize: 64,  // 最小显示尺寸
+          // maximumScale: 200,     // 最大缩放
+          clampAnimations: false, // 模型动画结束后展现最后一帧
+          incrementallyLoadTextures: true, // 加载模型后纹理是否可以继续流入
+          runAnimations: true, // 是否应启动模型中指定的glTF动画
+          // color: Cesium.Color.fromCssColorString(heatplantParameters.baseColor), // 模型基础颜色
+          color: new Cesium.CallbackProperty(
+            () =>
+              Cesium.Color.fromCssColorString(heatplantParameters.baseColor),
+            false,
+          ), // 模型基础颜色
+          // colorBlendMode: Cesium.ColorBlendMode[heatplantParameters.colorBlendMode], // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
+          colorBlendMode: new Cesium.CallbackProperty(
+            () => Cesium.ColorBlendMode[heatplantParameters.colorBlendMode],
+            false,
+          ), // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
+          // colorBlendAmount: heatplantParameters.colorBlendAmount, // 混色强度（1是纯色，0是模型原色）
+          colorBlendAmount: new Cesium.CallbackProperty(
+            () => heatplantParameters.colorBlendAmount,
+            false,
+          ), // 混色强度（1是纯色，0是模型原色）
+          shadows: Cesium.ShadowMode.ENABLED, // 模型接受阴影方式，DISABLED 对象不投射或接收阴影;ENABLED 对象投射并接收阴影;CAST_ONLY 对象仅投射阴影;RECEIVE_ONLY 对象仅接收阴影
+        },
+        // 可选：添加标签
+        // label: {
+        //     text: `点位${feature.properties.name}`,
+        //     font: 'bold 16px Microsoft YaHei',
+        //     fillColor: Cesium.Color.WHITE,
+        //     outlineColor: Cesium.Color.BLACK,
+        //     outlineWidth: 2,
+        //     verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        //     pixelOffset: new Cesium.Cartesian2(0, -50),
+        //     distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000)
+        // }
+      });
+    });
+    setHeatplantParameters();
+  } catch (error) {
+    console.error(`Error creating point tileset: ${error}`);
+  }
+};
+
+const setHeatplantParameters = () => {
+  const group = gui.addFolder("热源调参");
+  group.open();
+  group
+    .add(heatplantParameters, "scale", 0, 2000)
+    .name("模型大小")
+    .onChange((e) => {
+      heatplantParameters.scale = e;
+    });
+  group
+    .add(heatplantParameters, "colorBlendMode", {
+      HIGHLIGHT: "HIGHLIGHT",
+      REPLACE: "REPLACE",
+      MIX: "MIX",
+    })
+    .name("混合模式")
+    .onChange((e) => {
+      heatplantParameters.colorBlendMode = e;
+    });
+  group
+    .addColor(heatplantParameters, "baseColor")
+    .name("混合颜色")
+    .onChange((e) => {
+      heatplantParameters.baseColor = e;
+    });
+  group
+    .add(heatplantParameters, "colorBlendAmount", 0, 1)
+    .name("混色强度")
+    .onChange((e) => {
+      heatplantParameters.colorBlendAmount = e;
+    });
+};
+
 const addSubStations = async () => {
   // 添加换热站
   try {
@@ -719,13 +823,14 @@ const addSubStations = async () => {
     console.log(data);
     // 换热站颜色
     const colors = [
-      Cesium.Color.fromCssColorString("#FFC300"), // Blue
-      Cesium.Color.fromCssColorString("#FFC300"), // Green
-      Cesium.Color.fromCssColorString("#FFC300"), // Yellow
-      Cesium.Color.fromCssColorString("#FFC300"), // Orange
+      Cesium.Color.fromCssColorString("#D8A200"), // Blue
+      Cesium.Color.fromCssColorString("#D8A200"), // Green
+      Cesium.Color.fromCssColorString("#D8A200"), // Yellow
+      Cesium.Color.fromCssColorString("#D8A200"), // Orange
     ];
     const colorsCss = ["#0088ff", "#00ff00", "#ffaa00", "#FFE366"];
     const points = data.slice(0, 50);
+    // const points = data;
     const subList = [];
     points.forEach((feature) => {
       const coord = feature.geometry.coordinates;
@@ -757,11 +862,37 @@ const addSubStations = async () => {
     substationList.value = subList;
     handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((event) => {
-      const pickResult = viewer.scene.pick(event.position);
+      const pickResult = scene.pick(event.position);
       console.log(pickResult);
       if (pickResult && pickResult.id) {
+        const coord = pickResult.id.coord;
+        console.log(coord);
+        const height = 120.0;
+        const position = Cesium.Cartesian3.fromDegrees(
+          coord[0],
+          coord[1],
+          height,
+        );
+        console.log(position);
         const pickData = pickResult.id;
         console.log(pickData);
+        let html = `hello ${pickData.name} ${pickData.pid}`;
+        // 添加弹窗
+        // const a = new CesiumPopup({
+        //   title: "信息",
+        // })
+        //   .setPosition(position)
+        //   .setHTML(html)
+        //   .addTo(viewer)
+        //   .setTitle("详细信息框");
+
+        // a.on("close", function () {
+        //   console.log("close");
+        // });
+
+        // a.on("open", function () {
+        //   console.log("open");
+        // });
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   } catch (error) {
@@ -774,7 +905,7 @@ const makeCircle = (color, coord, properties) => {
     position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
     scale: 2.0, // 调整圆环大小以匹配尖柱底部
   };
-
+  properties["coord"] = coord;
   // 参考 makePillar 方案，使用 Primitive 和 Geometry 构造底部的圆形面片
   // 这个圆盘的顶点坐标是按照六边形或者多边形展开的
   // 刚才提供的顶点其实是和 makePillar 一模一样的！
@@ -809,13 +940,13 @@ const makeCircle = (color, coord, properties) => {
           // v_st 是从 0 到 1 的正方形纹理坐标
           float dist = distance(v_st, vec2(0.5));
           if(dist > 0.5) discard;
-          
+
           float time = czm_frameNumber * 2.0 / 100.0;
           float r = fract(dist * 6.0 - time);
           float ripple = smoothstep(0.4, 0.5, r) - smoothstep(0.5, 0.6, r);
           float centerGlow = smoothstep(0.35, -0.1, dist);
           float fade = 1.0 - smoothstep(0.3, 0.5, dist);
-          
+
           float alpha = (ripple + centerGlow) * fade;
           out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0); // 底部圆环颜色强度
       }
@@ -842,6 +973,8 @@ const makePillar = (color, coord, properties) => {
     position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
     scale: 2.0,
   };
+
+  properties["coord"] = coord;
 
   // 生成16边形的顶点数据，为了实现向内弯曲的弧度，我们需要在高度方向上进行分段
   const segments = 16; // 圆周分段数
@@ -1114,17 +1247,17 @@ const makeSpriteAnimation = (color, coord) => {
         source: `
           czm_material czm_getMaterial(czm_materialInput materialInput) {
             czm_material material = czm_getDefaultMaterial(materialInput);
-            
+
             // dt 动画时间，从下向上移动
             float dt = fract(czm_frameNumber / 90.0);
-            
+
             vec2 v_st = materialInput.st;
-            
+
             // 沿 t 轴向上移动，使用 fract 保证坐标在 0-1 之间循环
             vec2 st = vec2(v_st.s, fract(v_st.t - dt));
-            
+
             vec4 imageColor = texture(u_image, st);
-            
+
             // 透明度从底部向上越来越透明
             float alphaFade = pow(1.0 - v_st.t, 2.0);
 
@@ -1268,7 +1401,7 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-<style scoped>
+<style>
 .cesuim-container {
   height: 100vh;
   width: 100vw;
@@ -1281,5 +1414,77 @@ onUnmounted(() => {
   left: 10px;
   z-index: 9999;
   color: #fff;
+}
+.cesium-popup-panel {
+  opacity: 0.8;
+  width: 312px;
+  position: absolute;
+  z-index: 999;
+  color: #00fcf9;
+  background: rgba(23, 50, 108, 0.6);
+  border: 1px solid #4674d6;
+}
+.cesium-popup-tip-panel {
+  width: 40px;
+  height: 20px;
+  position: absolute;
+  left: 50%;
+  bottom: -20px;
+  margin-left: -20px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.8;
+}
+.cesium-popup-tip-bottom {
+  width: 17px;
+  background: rgba(23, 50, 108, 0.8);
+  border-bottom: 1px solid #4674d6;
+  height: 17px;
+  padding: 1px;
+  margin: -10px auto 0;
+  -webkit-transform: rotate(45deg);
+  -moz-transform: rotate(45deg);
+  -ms-transform: rotate(45deg);
+  transform: rotate(45deg);
+}
+.cesium-popup-header-panel {
+  /* display: flex; */
+  /* justify-content: space-between; */
+  align-items: center;
+  font-size: 14px;
+  padding: 5px 15px;
+  background: rgba(23, 50, 108, 0.8);
+
+  border-bottom: 1px solid #4674d6;
+}
+
+.cesium-poput-header-title {
+  font-size: 16px;
+  font-family: Microsoft YaHei;
+  font-weight: 400;
+  color: #ffffff;
+}
+
+.cesium-popup-content-panel {
+  padding: 18px;
+}
+.cesium-popup-close-btn {
+  float: right;
+  position: relative;
+  right: 10px;
+}
+.cesium-popup-close-btn,
+.cesium-popup-close-btn:focus {
+  cursor: pointer;
+}
+cesium-popup-close-btn > svg:hover {
+  color: #00fcf9 !important;
+}
+.cesium-popup-close-btn > svg {
+  user-select: auto;
+  color: #4674d6;
+  cursor: pointer;
+  width: 15px;
+  /* height: 15px; */
 }
 </style>

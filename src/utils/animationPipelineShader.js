@@ -11,10 +11,12 @@ const animationPipelineShader = (pipiLineParameters) => {
     baseColor: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Color.png",
     normal: "/textures/pipe-metal-oxidized/Metal024_1K-JPG_NormalGL.png",
     metallicRoughness:
-      "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
+      "",
+    // metallicRoughness:
+    //   "/textures/pipe-metal-oxidized/Metal024_1K-JPG_Roughness_Metalness.png",
   };
 
-  const FLOW_TEXTURE = "/textures/lineTexture/bj2.png";
+  const FLOW_TEXTURE = "/textures/lineTexture/bj3.png";
 
   const createSolidTexture = (red, green, blue, alpha) => {
     return new TextureUniform({
@@ -28,11 +30,11 @@ const animationPipelineShader = (pipiLineParameters) => {
   const DEFAULT_EMISSIVE_TEXTURE = createSolidTexture(0, 0, 0, 255);
 
   const FLOW_CONFIG = {
-    speed: 0.35,
-    intensity: 6,
+    speed: 0.2,
+    intensity: 2.5,
     color: new Cartesian3(pipiLineParameters.flowColor.red, pipiLineParameters.flowColor.green, pipiLineParameters.flowColor.blue),
     uvScale: 1.0, // 整体UV缩放
-    repeatX: 0.05, // 新增：横向重复次数（越大=横向越短/密集，越小=横向越长/稀疏）
+    repeatX: 0.03, // 新增：横向重复次数（越大=横向越短/密集，越小=横向越长/稀疏）
     repeatY: 1.0, // 新增：纵向重复次数
     direction: 0,
   };
@@ -133,7 +135,7 @@ const animationPipelineShader = (pipiLineParameters) => {
       return normalize(tbn * scaledNormalTS);
     }
 
-    // ========== 修复后的流动动画函数（支持独立XY重复）==========
+    // ========== 流动动画函数（支持独立XY重复）==========
     vec4 calculateFlow(vec2 baseUV) {
       // 旋转UV 90度，让水平贴图适配纵向管子
       vec2 rotatedUV = vec2(baseUV.t, baseUV.s);

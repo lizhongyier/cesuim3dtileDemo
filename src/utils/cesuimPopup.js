@@ -4,7 +4,7 @@
  * @Last Modified by: Jercky
  * @Last Modified time: 2020-10-22 12:16:41
  */
-
+import * as Cesium from "cesium";
 var BaseEvent = function () {
   this.handles = {};
   this.cached = [];
@@ -137,7 +137,7 @@ var CesiumPopup = (function () {
   CesiumPopup.prototype.render = function () {
     var geometry = this.position;
     if (!geometry) return;
-    var position = Cesium.SceneTransforms.wgs84ToWindowCoordinates(
+    var position = Cesium.SceneTransforms.worldToWindowCoordinates(
       _viewer.scene,
       geometry,
     );
@@ -216,3 +216,4 @@ var CesiumPopup = (function () {
 
   return CesiumPopup;
 })();
+export default CesiumPopup;
