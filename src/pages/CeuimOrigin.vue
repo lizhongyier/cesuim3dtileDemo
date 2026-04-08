@@ -21,6 +21,7 @@ let pointShaderRef = null;
 let animationId = null;
 let handler = null;
 let isAnimating = false;
+let fenceAnimationPrimitives = [];
 const gui = new dat.GUI();
 
 // ========== 楼宇渐变颜色参数 ==========
@@ -33,9 +34,9 @@ const buildingParameters = {
   },
   // 顶部颜色 (默认亮青色)
   endColor: {
-    red: 0.62,
-    green: 0.67,
-    blue: 0.75,
+    red: 0.4,
+    green: 0.4,
+    blue: 0.5,
   },
   // 最小高度 (用于归一化)
   minHeight: 0.0,
@@ -64,10 +65,25 @@ const pipiLineParameters = {
 };
 
 const heatplantParameters = {
-  baseColor: "#D8A200",
-  scale: 600.0, // 根据模型实际尺寸调整
+  baseColor: "#FFFFFF",
+  scale: 1200.0, // 根据模型实际尺寸调整
   colorBlendMode: "HIGHLIGHT", // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
   colorBlendAmount: 1, // 混色强度（1是纯色，0是模型原色）
+};
+
+const fenceParameters = {
+  width: 220.0,
+  depth: 220.0,
+  wallHeight: 70.0,
+  bottomHeight: 6.0, // 墙底部重点线高度
+  baseColor: "#00a8ff", // 底部圆环颜色
+  baseExpandSpeed: 2.0,
+  baseExpandMax: 1.5,
+  wallColor: "#00d2ff", // 墙底部颜色
+  wallOpacity: 0.2, // 从0.6改为0.4，更透明
+  particleColor: "#80e5ff", // 贴图颜色
+  particleSpeed: 0.5, // 贴图上升速度
+  particleDensity: 35, // 亮度
 };
 
 const substationModelMatrix = (coord) => {
@@ -681,6 +697,216 @@ const makeBuildingCustomShader = () => {
   });
 };
 
+const rebuildFence = () => {
+  // 移除旧的围栏
+  fenceAnimationPrimitives.forEach((primitive) => {
+    viewer.scene.primitives.remove(primitive);
+  });
+  fenceAnimationPrimitives = [];
+
+  // 获取所有热源头实体
+  const heatplantEntities = viewer.entities.values.filter(
+    (e) => e.id && e.id.startsWith("heatplant-"),
+  );
+
+  // 延迟一帧重新创建围栏，确保在模型之后渲染
+  requestAnimationFrame(() => {
+    heatplantEntities.forEach((entity) => {
+      const cartographic = Cesium.Cartographic.fromCartesian(
+        entity.position.getValue(),
+      );
+      const coord = [
+        Cesium.Math.toDegrees(cartographic.longitude),
+        Cesium.Math.toDegrees(cartographic.latitude),
+      ];
+      const properties = {
+        name: entity.name,
+        pid: entity.id.replace("heatplant-", ""),
+      };
+
+      const baseColor = Cesium.Color.fromCssColorString(
+        fenceParameters.baseColor,
+      );
+      const wallColor = Cesium.Color.fromCssColorString(
+        fenceParameters.wallColor,
+      );
+      const particleColor = Cesium.Color.fromCssColorString(
+        fenceParameters.particleColor,
+      );
+
+      const basePrimitive = makeFenceBaseExpand(baseColor, coord, properties);
+      fenceAnimationPrimitives.push(basePrimitive);
+
+      const wallPrimitive = makeFenceWall(wallColor, coord, properties);
+      fenceAnimationPrimitives.push(wallPrimitive);
+
+      // const particlePrimitive = makeFenceParticles(particleColor, coord, properties);
+      // fenceAnimationPrimitives.push(particlePrimitive);
+    });
+  });
+};
+
+const setFenceParameters = () => {
+  const group = gui.addFolder("热源围栏调参");
+  group.open();
+
+  const sizeFolder = group.addFolder("围栏尺寸");
+  sizeFolder.open();
+
+  // 添加onChange回调，触发重建
+  sizeFolder
+    .add(fenceParameters, "width", 50, 300)
+    .name("宽度")
+    .onChange(() => {
+      rebuildFence();
+    });
+  sizeFolder
+    .add(fenceParameters, "depth", 50, 300)
+    .name("深度")
+    .onChange(() => {
+      rebuildFence();
+    });
+  sizeFolder
+    .add(fenceParameters, "wallHeight", 30, 150)
+    .name("围墙高度")
+    .onChange(() => {
+      rebuildFence();
+    });
+
+  const baseFolder = group.addFolder("底部扩散");
+  baseFolder.open();
+  baseFolder
+    .addColor(fenceParameters, "baseColor")
+    .name("颜色")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (p.appearanceRef && p.appearanceRef.uniforms.u_color) {
+          p.appearanceRef.uniforms.u_color = Cesium.Color.fromCssColorString(e);
+        }
+      });
+    });
+  baseFolder
+    .add(fenceParameters, "baseExpandSpeed", 0.5, 5.0)
+    .name("扩散速度")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearanceRef &&
+          p.appearanceRef.uniforms.u_expandSpeed !== undefined
+        ) {
+          p.appearanceRef.uniforms.u_expandSpeed = e;
+        }
+      });
+    });
+  baseFolder
+    .add(fenceParameters, "baseExpandMax", 1.0, 3.0)
+    .name("最大扩散倍数")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearanceRef &&
+          p.appearanceRef.uniforms.u_expandMax !== undefined
+        ) {
+          p.appearanceRef.uniforms.u_expandMax = e;
+        }
+      });
+    });
+
+  const wallFolder = group.addFolder("围墙效果");
+  wallFolder.open();
+  wallFolder
+    .addColor(fenceParameters, "wallColor")
+    .name("颜色")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearanceRef &&
+          p.appearanceRef.uniforms.u_color &&
+          !(p.appearance instanceof Cesium.EllipsoidSurfaceAppearance) &&
+          !(p.appearance instanceof Cesium.MaterialAppearance)
+        ) {
+          p.appearanceRef.uniforms.u_color = Cesium.Color.fromCssColorString(e);
+        }
+      });
+    });
+  wallFolder
+    .add(fenceParameters, "wallOpacity", 0.1, 1.0)
+    .name("透明度")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearanceRef &&
+          p.appearanceRef.uniforms.u_opacity !== undefined
+        ) {
+          p.appearanceRef.uniforms.u_opacity = e;
+        }
+      });
+    });
+
+  const particleFolder = group.addFolder("粒子动画");
+  particleFolder.open();
+  particleFolder
+    .addColor(fenceParameters, "particleColor")
+    .name("粒子颜色")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearance &&
+          p.appearance.material &&
+          p.appearance.material.uniforms.u_color
+        ) {
+          p.appearance.material.uniforms.u_color =
+            Cesium.Color.fromCssColorString(e);
+        }
+      });
+    });
+  particleFolder
+    .add(fenceParameters, "particleSpeed", 0.2, 3.0)
+    .name("上升速度")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearance &&
+          p.appearance.material &&
+          p.appearance.material.uniforms.u_speed !== undefined
+        ) {
+          p.appearance.material.uniforms.u_speed = e;
+        }
+      });
+    });
+  particleFolder
+    .add(fenceParameters, "particleDensity", 5, 50)
+    .name("粒子密度")
+    .onChange((e) => {
+      fenceAnimationPrimitives.forEach((p) => {
+        if (
+          p.appearance &&
+          p.appearance.material &&
+          p.appearance.material.uniforms.u_density !== undefined
+        ) {
+          p.appearance.material.uniforms.u_density = e / 100.0;
+        }
+      });
+    });
+};
+
+const updateFenceAnimation = (time) => {
+  fenceAnimationPrimitives.forEach((primitive) => {
+    if (primitive.appearanceRef && primitive.appearanceRef.uniforms) {
+      primitive.appearanceRef.uniforms.u_time = time;
+    }
+    if (
+      primitive.appearance &&
+      primitive.appearance.material &&
+      primitive.appearance.material.uniforms
+    ) {
+      if (primitive.appearance.material.uniforms.u_time !== undefined) {
+        primitive.appearance.material.uniforms.u_time = time;
+      }
+    }
+  });
+};
+
 // 动态更新流动参数
 const startFlowAnimation = () => {
   if (isAnimating) return;
@@ -701,7 +927,7 @@ const startFlowAnimation = () => {
     if (pointShaderRef) {
       pointShaderRef.setUniform("u_time", currentTime);
     }
-
+    updateFenceAnimation(currentTime);
     // 请求下一帧
     animationId = requestAnimationFrame(animate);
   };
@@ -720,66 +946,486 @@ const makePipeLieCustomShader = () => {
 };
 
 const addHeatplants = async () => {
-  // 添加热源
   try {
     const res = await fetch("/json/许昌-重要站点.geojson");
     const data = await res.json();
 
     const points = data.features;
-    const modelUri = "/models/热源模型.glb";
+    const modelUri = "/models/热源模型2.glb";
+
+    // 第一步：先创建所有热源模型（不透明物体先渲染）
+    const heatplantEntities = [];
     points.forEach((feature) => {
       const coord = feature.geometry.coordinates;
-      viewer.entities.add({
+      const entity = viewer.entities.add({
         id: `heatplant-${feature.properties.pid}`,
         name: `点位 ${feature.properties.name}`,
         position: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0),
         model: {
           uri: modelUri,
-          // scale: heatplantParameters.scale, // 根据模型实际尺寸调整
           scale: new Cesium.CallbackProperty(
             () => heatplantParameters.scale,
             false,
-          ), // 根据模型实际尺寸调整
-          // minimumPixelSize: 64,  // 最小显示尺寸
-          // maximumScale: 200,     // 最大缩放
-          clampAnimations: false, // 模型动画结束后展现最后一帧
-          incrementallyLoadTextures: true, // 加载模型后纹理是否可以继续流入
-          runAnimations: true, // 是否应启动模型中指定的glTF动画
-          // color: Cesium.Color.fromCssColorString(heatplantParameters.baseColor), // 模型基础颜色
-          color: new Cesium.CallbackProperty(
-            () =>
-              Cesium.Color.fromCssColorString(heatplantParameters.baseColor),
-            false,
-          ), // 模型基础颜色
-          // colorBlendMode: Cesium.ColorBlendMode[heatplantParameters.colorBlendMode], // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
+          ),
+          clampAnimations: false,
+          incrementallyLoadTextures: true,
+          runAnimations: true,
+          color: new Cesium.CallbackProperty(() => {
+            const baseColor = Cesium.Color.fromCssColorString(
+              heatplantParameters.baseColor,
+            );
+            return new Cesium.Color(
+              Math.min(baseColor.red * 1.3, 1.0),
+              Math.min(baseColor.green * 1.3, 1.0),
+              Math.min(baseColor.blue * 1.3, 1.0),
+              baseColor.alpha,
+            );
+          }, false),
           colorBlendMode: new Cesium.CallbackProperty(
             () => Cesium.ColorBlendMode[heatplantParameters.colorBlendMode],
             false,
-          ), // 模型颜色混合模式HIGHLIGHT | REPLACE | MIX
-          // colorBlendAmount: heatplantParameters.colorBlendAmount, // 混色强度（1是纯色，0是模型原色）
+          ),
           colorBlendAmount: new Cesium.CallbackProperty(
             () => heatplantParameters.colorBlendAmount,
             false,
-          ), // 混色强度（1是纯色，0是模型原色）
-          shadows: Cesium.ShadowMode.ENABLED, // 模型接受阴影方式，DISABLED 对象不投射或接收阴影;ENABLED 对象投射并接收阴影;CAST_ONLY 对象仅投射阴影;RECEIVE_ONLY 对象仅接收阴影
+          ),
+          shadows: Cesium.ShadowMode.ENABLED,
         },
-        // 可选：添加标签
-        // label: {
-        //     text: `点位${feature.properties.name}`,
-        //     font: 'bold 16px Microsoft YaHei',
-        //     fillColor: Cesium.Color.WHITE,
-        //     outlineColor: Cesium.Color.BLACK,
-        //     outlineWidth: 2,
-        //     verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        //     pixelOffset: new Cesium.Cartesian2(0, -50),
-        //     distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000)
-        // }
+      });
+      heatplantEntities.push({ entity, coord, properties: feature.properties });
+    });
+
+    // 第二步：再创建围栏（透明物体后渲染）
+    // 使用 requestAnimationFrame 确保在模型渲染后再添加围栏
+    requestAnimationFrame(() => {
+      heatplantEntities.forEach(({ coord, properties }) => {
+        const baseColor = Cesium.Color.fromCssColorString(
+          fenceParameters.baseColor,
+        );
+        const wallColor = Cesium.Color.fromCssColorString(
+          fenceParameters.wallColor,
+        );
+        const particleColor = Cesium.Color.fromCssColorString(
+          fenceParameters.particleColor,
+        );
+
+        const basePrimitive = makeFenceBaseExpand(baseColor, coord, properties);
+        fenceAnimationPrimitives.push(basePrimitive);
+
+        const wallPrimitive = makeFenceWall(wallColor, coord, properties);
+        fenceAnimationPrimitives.push(wallPrimitive);
+
+        const particlePrimitive = makeFenceParticles(
+          particleColor,
+          coord,
+          properties,
+        );
+        fenceAnimationPrimitives.push(particlePrimitive);
       });
     });
+
     setHeatplantParameters();
+    // setFenceParameters();
   } catch (error) {
     console.error(`Error creating point tileset: ${error}`);
   }
+};
+
+// ========== 四边形底部扩散动画（修复版） ==========
+const makeFenceBaseExpand = (color, coord, properties) => {
+  properties["coord"] = coord;
+  const circleGeometry = new Cesium.CircleGeometry({
+    center: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 0.5),
+    radius: fenceParameters.width / 2, // 波纹扩散半径
+    vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT,
+  });
+
+  const instance = new Cesium.GeometryInstance({
+    geometry: circleGeometry,
+    id: properties,
+  });
+
+  // 波纹扩散着色器逻辑
+  const appearance = new Cesium.EllipsoidSurfaceAppearance({
+    renderState: {
+      blending: Cesium.BlendingState.ALPHA_BLEND,
+      depthTest: { enabled: true }, // 关键：关闭深度测试
+      depthMask: false,
+    },
+    fragmentShaderSource: `
+      in vec2 v_st;
+      uniform vec4 u_color;
+      void main() {
+          // v_st 是从 0 到 1 的正方形纹理坐标
+          float dist = distance(v_st, vec2(0.5));
+          if(dist > 0.5) discard;
+
+          float time = czm_frameNumber * 2.0 / 100.0;
+          float r = fract(dist * 6.0 - time);
+          float ripple = smoothstep(0.4, 0.5, r) - smoothstep(0.5, 0.6, r);
+          float centerGlow = smoothstep(0.35, -0.1, dist);
+          float fade = 1.0 - smoothstep(0.3, 0.5, dist);
+
+          float alpha = (ripple + centerGlow) * fade;
+          out_FragColor = vec4(u_color.rgb, alpha * u_color.a * 2.0); // 底部圆环颜色强度
+      }
+    `,
+  });
+
+  appearance.uniforms = {
+    u_color: color,
+  };
+
+  const primitive = new Cesium.Primitive({
+    geometryInstances: instance,
+    appearance: appearance,
+    asynchronous: false,
+    allowPicking: true,
+  });
+
+  viewer.scene.primitives.add(primitive);
+  return primitive;
+};
+
+// ========== 四边形围墙（优化透明度版） ==========
+const makeFenceWall = (color, coord, properties) => {
+  const width = fenceParameters.width;
+  const depth = fenceParameters.depth;
+  const height = fenceParameters.bottomHeight;
+  const halfW = width / 2;
+  const halfD = depth / 2;
+
+  const positionsArray = [
+    -halfW,
+    -halfD,
+    0,
+    halfW,
+    -halfD,
+    0,
+    halfW,
+    -halfD,
+    height,
+    -halfW,
+    -halfD,
+    height,
+    halfW,
+    -halfD,
+    0,
+    halfW,
+    halfD,
+    0,
+    halfW,
+    halfD,
+    height,
+    halfW,
+    -halfD,
+    height,
+    halfW,
+    halfD,
+    0,
+    -halfW,
+    halfD,
+    0,
+    -halfW,
+    halfD,
+    height,
+    halfW,
+    halfD,
+    height,
+    -halfW,
+    halfD,
+    0,
+    -halfW,
+    -halfD,
+    0,
+    -halfW,
+    -halfD,
+    height,
+    -halfW,
+    halfD,
+    height,
+  ];
+
+  const stsArray = [
+    0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0,
+    0, 1, 0, 1, 1, 0, 1,
+  ];
+
+  const indicesArray = [
+    0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14,
+    15,
+  ];
+
+  const positions = new Float64Array(positionsArray);
+  const sts = new Float32Array(stsArray);
+  const indices = new Uint16Array(indicesArray);
+
+  const geometry = new Cesium.Geometry({
+    attributes: {
+      position: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+        componentsPerAttribute: 3,
+        values: positions,
+      }),
+      st: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.FLOAT,
+        componentsPerAttribute: 2,
+        values: sts,
+      }),
+    },
+    indices: indices,
+    primitiveType: Cesium.PrimitiveType.TRIANGLES,
+    boundingSphere: Cesium.BoundingSphere.fromVertices(positions),
+  });
+
+  const instance = new Cesium.GeometryInstance({
+    geometry: geometry,
+    modelMatrix: substationModelMatrix(coord),
+    id: properties,
+  });
+
+  // 优化：使用更透明的线框效果，确保内部模型可见
+  const appearance = new Cesium.Appearance({
+    renderState: {
+      blending: Cesium.BlendingState.ALPHA_BLEND,
+      // 启用深度测试，确保正确遮挡关系
+      depthTest: { enabled: true, func: Cesium.DepthFunction.LEQUAL },
+      // 透明物体不写入深度缓冲
+      depthMask: false,
+      // 关键修复：禁用面剔除，让围栏双面可见（从内外都能看到）
+      cull: { enabled: false }, // 改为 false
+    },
+    fragmentShaderSource: `
+      in vec2 v_st;
+      uniform vec4 u_color;
+      uniform float u_opacity;
+      uniform float u_time;
+      
+      void main() {
+        float edgeX = smoothstep(0.0, 0.02, v_st.x) - smoothstep(0.98, 1.0, v_st.x);
+        float edgeY = smoothstep(0.0, 0.02, v_st.y) - smoothstep(0.98, 1.0, v_st.y);
+        
+        float scanLine = fract(v_st.y - u_time * 0.5);
+        float scanEffect = smoothstep(0.45, 0.5, scanLine) - smoothstep(0.5, 0.55, scanLine);
+        
+        float baseAlpha = 0.15;
+        float edgeAlpha = (edgeX + edgeY) * 0.6;
+        float scanAlpha = scanEffect * 0.4;
+        
+        float alpha = (baseAlpha + edgeAlpha + scanAlpha) * u_opacity;
+        alpha = clamp(alpha, 0.0, 1.8);
+        
+        // 透明度太低时丢弃
+        if (alpha < 0.01) discard;
+        
+        vec3 finalColor = u_color.rgb * 1.2;
+        
+        out_FragColor = vec4(finalColor, alpha);
+      }
+    `,
+    vertexShaderSource: `
+      in vec3 position3DHigh;
+      in vec3 position3DLow;
+      in vec2 st;
+      in float batchId;
+      out vec2 v_st;
+      
+      void main() {
+        vec4 p = czm_computePosition();
+        v_st = st;
+        gl_Position = czm_modelViewProjectionRelativeToEye * p;
+      }
+    `,
+  });
+
+  appearance.uniforms = {
+    u_color: color,
+    u_opacity: fenceParameters.wallOpacity,
+    u_time: 0.0,
+  };
+
+  const primitive = new Cesium.Primitive({
+    geometryInstances: instance,
+    appearance: appearance,
+    asynchronous: false,
+    allowPicking: true,
+    // 关键：设置渲染顺序，透明物体在后
+    classificationType: Cesium.ClassificationType.BOTH,
+  });
+
+  primitive.appearanceRef = appearance;
+  viewer.scene.primitives.add(primitive);
+  return primitive;
+};
+
+// ========== 四边形粒子上升动画 ==========
+const makeFenceParticles = (color, coord, properties) => {
+  const width = fenceParameters.width * 0.98;
+  const depth = fenceParameters.depth * 0.98;
+  const height = fenceParameters.wallHeight;
+  const halfW = width / 2;
+  const halfD = depth / 2;
+
+  const positionsArray = [];
+  const stsArray = [];
+  const indicesArray = [];
+
+  const verticalSegments = 12; // 增加分段数
+  const perimeterSegments = 20; // 增加周长分段
+
+  for (let v = 0; v <= verticalSegments; v++) {
+    const t = v / verticalSegments;
+    const z = t * height;
+
+    for (let p = 0; p <= perimeterSegments; p++) {
+      const pt = p / perimeterSegments;
+      let x, y;
+
+      if (pt <= 0.25) {
+        const localT = pt / 0.25;
+        x = -halfW + localT * width;
+        y = -halfD;
+      } else if (pt <= 0.5) {
+        const localT = (pt - 0.25) / 0.25;
+        x = halfW;
+        y = -halfD + localT * depth;
+      } else if (pt <= 0.75) {
+        const localT = (pt - 0.5) / 0.25;
+        x = halfW - localT * width;
+        y = halfD;
+      } else {
+        const localT = (pt - 0.75) / 0.25;
+        x = -halfW;
+        y = halfD - localT * depth;
+      }
+
+      positionsArray.push(x, y, z);
+      stsArray.push(pt, t);
+    }
+  }
+
+  for (let v = 0; v < verticalSegments; v++) {
+    for (let p = 0; p < perimeterSegments; p++) {
+      const current = v * (perimeterSegments + 1) + p;
+      const next = current + 1;
+      const top = current + (perimeterSegments + 1);
+      const topNext = top + 1;
+
+      indicesArray.push(current, next, top);
+      indicesArray.push(next, topNext, top);
+    }
+  }
+
+  const positions = new Float64Array(positionsArray);
+  const sts = new Float32Array(stsArray);
+  const indices = new Uint16Array(indicesArray);
+
+  const geometry = new Cesium.Geometry({
+    attributes: {
+      position: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+        componentsPerAttribute: 3,
+        values: positions,
+      }),
+      st: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.FLOAT,
+        componentsPerAttribute: 2,
+        values: sts,
+      }),
+    },
+    indices: indices,
+    primitiveType: Cesium.PrimitiveType.TRIANGLES,
+    boundingSphere: Cesium.BoundingSphere.fromVertices(positions),
+  });
+
+  const instance = new Cesium.GeometryInstance({
+    geometry: geometry,
+    modelMatrix: substationModelMatrix(coord),
+    id: properties,
+  });
+
+  // 优化粒子材质：更透明，更细
+  const appearance = new Cesium.MaterialAppearance({
+    renderState: {
+      blending: Cesium.BlendingState.ALPHA_BLEND,
+      depthTest: { enabled: true },
+      depthMask: false,
+    },
+    material: new Cesium.Material({
+      fabric: {
+        uniforms: {
+          u_color: color,
+          // u_particleTex: "/statics/particles.png",
+          u_particleTex: "/statics/flow2.png",
+          u_time: 0.0,
+          u_speed: fenceParameters.particleSpeed,
+          u_density: fenceParameters.particleDensity / 10.0,
+        },
+        source: `
+         czm_material czm_getMaterial(czm_materialInput materialInput) {
+            czm_material material = czm_getDefaultMaterial(materialInput);
+            
+            vec2 v_st = materialInput.st;
+            float time = u_time * u_speed;
+            float particleOffset = fract(v_st.y - time);
+            
+            vec2 particleUV = vec2(v_st.x, particleOffset);
+            // 设置横向重复贴图
+            particleUV.x = fract(particleUV.x * 1.0);
+
+            vec4 particleColor = texture(u_particleTex, particleUV);
+            float densityThreshold = step(1.0 - u_density, particleColor.a);
+            float heightFade = pow(1.0 - v_st.y, 1.0); // 更快的淡出
+
+            // 边缘发光但透明度更低
+            float edgeGlow = sin(v_st.x * 3.14159) * 0.5 + 0.5;
+            
+            vec3 finalColor = u_color.rgb * (0.8 + edgeGlow * 0.4);
+            // 降低整体透明度
+            float alpha = particleColor.a * densityThreshold * heightFade * u_color.a * 1.5;
+            alpha = clamp(alpha, 0.0, 0.3); // 限制最大透明度
+            
+            material.diffuse = finalColor;
+            material.alpha = alpha;
+            material.emission = finalColor * edgeGlow * 0.8; // 降低发光强度
+            
+            return material;
+          }
+        `,
+      },
+    }),
+    translucent: true,
+    vertexShaderSource: `
+      in vec3 position3DHigh;
+      in vec3 position3DLow;
+      in vec2 st;
+      in float batchId;
+      out vec2 v_st;
+      out vec3 v_positionEC;
+      out vec3 v_normalEC;
+      
+      void main() {
+        vec4 p = czm_computePosition();
+        v_st = st;
+        v_positionEC = (czm_modelViewRelativeToEye * p).xyz;
+        v_normalEC = vec3(0.0, 0.0, 1.0);
+        gl_Position = czm_modelViewProjectionRelativeToEye * p;
+      }
+    `,
+  });
+
+  appearance.uniforms = { u_time: 0.0 };
+
+  const primitive = new Cesium.Primitive({
+    geometryInstances: instance,
+    appearance: appearance,
+    asynchronous: false,
+    allowPicking: false,
+  });
+
+  primitive.appearanceRef = appearance;
+  viewer.scene.primitives.add(primitive);
+  return primitive;
 };
 
 const setHeatplantParameters = () => {
@@ -901,10 +1547,6 @@ const addSubStations = async () => {
 };
 
 const makeCircle = (color, coord, properties) => {
-  const options = {
-    position: [(coord[0] * Math.PI) / 180, (coord[1] * Math.PI) / 180, 0],
-    scale: 2.0, // 调整圆环大小以匹配尖柱底部
-  };
   properties["coord"] = coord;
   // 参考 makePillar 方案，使用 Primitive 和 Geometry 构造底部的圆形面片
   // 这个圆盘的顶点坐标是按照六边形或者多边形展开的
@@ -1321,6 +1963,7 @@ onUnmounted(() => {
     viewer.destroy();
   }
   viewer = null;
+  fenceAnimationPrimitives = [];
 });
 </script>
 <template>

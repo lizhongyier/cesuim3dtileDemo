@@ -14,11 +14,11 @@ const addBloomEffect = (scene, Cesium) => {
   const viewModel = {
     show: true,
     glowOnly: false,
-    contrast: 128,
+    contrast: 8,
     brightness: -0.3,
     delta: 1.0,
-    sigma: 3.78,
-    stepSize: 3.0
+    sigma: 2.2,
+    stepSize: 1.5
   };
 
   Cesium.knockout.track(viewModel);
