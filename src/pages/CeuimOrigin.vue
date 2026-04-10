@@ -93,18 +93,32 @@ const substationModelMatrix = (coord) => {
   );
 };
 
-const addBillboard = (coord, height, imgUrl) => {
+const addBillboard = (coord, height, imgUrl, type) => {
   if (!imgUrl) {
     return;
   }
-  viewer.entities.add({
-    position: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], height),
-    billboard: {
+  let billboard = {
+    image: imgUrl,
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    // 距离在2000-10000之间的时候，Billboard的Scale比例按照1->0之间的插值来缩放
+    scaleByDistance: new Cesium.NearFarScalar(2000, 1, 10000, 0.5),
+    width: 40,//换热站大小
+    height: 40
+  }
+  if (type === 'heatplant') {
+    // 热源情况
+    billboard = {
       image: imgUrl,
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       // 距离在2000-10000之间的时候，Billboard的Scale比例按照1->0之间的插值来缩放
-      scaleByDistance: new Cesium.NearFarScalar(2000, 1, 10000, 0),
-    },
+      scaleByDistance: new Cesium.NearFarScalar(2000, 1, 10000, 0.5),
+      width: 50,//热源大小
+      height: 50
+    }
+  }
+  viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(coord[0], coord[1], height),
+    billboard: billboard,
   });
 };
 
@@ -139,7 +153,7 @@ const initViewer = () => {
   });
   viewer.imageryLayers.addImageryProvider(
     new Cesium.UrlTemplateImageryProvider({
-      url: "your img tiles url",
+      url: "your url",
       minimumLevel: 3,
       maximumLevel: 18,
     }),
@@ -779,7 +793,7 @@ const addHeatplants = async () => {
     const heatplantEntities = [];
     points.forEach((feature) => {
       const coord = feature.geometry.coordinates;
-      addBillboard(coord, 150, "/statics/换热站.png");
+      addBillboard(coord, 180, "/statics/热源.png", 'heatplant');
       const entity = viewer.entities.add({
         id: `heatplant-${feature.properties.pid}`,
         name: `点位 ${feature.properties.name}`,
@@ -1309,7 +1323,7 @@ const addSubStations = async () => {
       const cssColor = colorsCss[colorIndex];
       const cylinderHeight = 40.0;
       const properties = feature.properties;
-      addBillboard(coord, 150, "/statics/换热站.png");
+      addBillboard(coord, 120, "/statics/换热站.png", 'substation');
       const circlePrimitive = makeCircle(color, coord, properties);
       const pillarPrimitive = makePillar(color, coord, properties);
       makeSpriteAnimation(color, coord);
